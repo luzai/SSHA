@@ -5,10 +5,10 @@ import datetime
 # sys.path.append('.')
 from ssha_detector import SSHDetector
 import lz
-
+from lz import *
+os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = '0'
 lz.init_dev(3)
-scales = [1080*2, 1920*2]
-# scales = [3024, 4032]
+scales = [4032, 3024]
 #  3456, 4608
 
 detector = SSHDetector('./kmodel/e2e', 0)
@@ -22,7 +22,7 @@ cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 # len(v), v.frame_shape
 
 src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29正、侧、背/正/'
-v = pims.ImageSequence(src_dir+'/*.JPG')
+v = pims.ImageSequence(src_dir + '/*.JPG')
 dst = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29正、侧、背/'
 
 
@@ -59,6 +59,7 @@ def detect_face(img, ind=None):
         cv2.imwrite(f"{dst}/proc/{ind}.png", img)
         import cvbase as cvb
         cvb.show_img(img, 'test', wait_time=1000 // 80 * 80)
+        # cvb.show_img(img, 'test', wait_time=0)
 
     diff = timeb - timea
     print('detection uses', diff.total_seconds(), 'seconds')
@@ -77,11 +78,12 @@ for ind, frame in enumerate(v):
     if faces.shape[0] != 0:
         res[ind] = faces
         logging.info(str(faces.shape))
-    for faces_ind in range(len(faces)):
-        x, y, x2, y2 = faces[faces_ind, :4]
-        x, y, x2, y2 = list(map(int, [x, y, x2, y2]))
-        face_img = frame[y:y2, x:x2, :]
-        cvb.write_img(face_img, f'{dst}/face/{ind}.png')
+    for ind_faces in range(len(faces)):
+        bbox, score, kps = faces[ind_faces, :4], faces[ind_faces, 4], faces[ind_faces, 5:].reshape(5, 2)
+        warp_face = preprocess(frame, bbox=bbox,
+                               landmark=kps
+                               )
+        cvb.write_img(warp_face, f'{dst}/face/{ind}.png')
         # if ind > 500: break
 
 lz.msgpack_dump(res, dst + 'face.pk')

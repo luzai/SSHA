@@ -1,136 +1,161 @@
-import cv2
-import sys, os
-
-os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = '0'
-import numpy as np
-import datetime
-# sys.path.append('.')
+import datetime, lz
 from ssha_detector import SSHDetector
-import lz as lz
-import cvbase as cvb
-import pims
-from lz import *
-from skimage import transform as trans
-
-lz.init_dev(lz.get_dev())
 scales = [4032, 3024]
-# scales = [200, 600]
 detector = SSHDetector('./kmodel/e2e', 0)
+try:
+    import pims
+except:
+    print('!! no pims')
+from lz import *
+init_dev(get_dev(mem_thresh=(.5, .5)))
+
+cv2.namedWindow('test', cv2.WINDOW_NORMAL)
+from insightface import FeaExtractor
+
+extractor = FeaExtractor(day=param_day)
+succs = []
+
+for ind, faces in res.items():
+    # ind = list(res.keys())[50]
+    # faces = res[ind]
+    frame = v[ind]
+    frame = frame if not (param_type == 'mov' and param_day == 'yy2') else np.rot90(frame, ).copy()
+    # plt_imshow(np.rot90(frame, 0), )
+    # plt.show()
+
+    frame = cvb.rgb2bgr(frame)
+    # print(faces.shape)
+    # img = frame.copy()
+    frame_ori = frame.copy()
+    frame_ori2 = frame.copy()
+    img = frame
+    # img = cvb.read_img('test_image/test_2.jpg').copy()
+
+    for num in range(faces.shape[0]):
+        score = faces[num, 4]
+        if score < 0.9: continue
+        # print(score)
+        bbox = faces[num, 0:5]
+        label_text = 'det {:.02f}'.format(bbox[4])
+        cv2.putText(img, label_text, (int(bbox[0]),
+                                      int(bbox[1] - 2)),
+                    cv2.FONT_HERSHEY_COMPLEX, 1., (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
+        # kpoint = faces[num, 5:15]
+        # for knum in range(5):
+        #     cv2.circle(img, (kpoint[2 * knum], kpoint[2 * knum + 1]), 1, [0, 0, 255], 2)
+
+    # cvb.show_img(img, win_name='', wait_time=1000 // 40)
+    # cvb.show_img(img, win_name='', )
+    # cv2.imwrite("res.jpg".format(ind), img)
+
+    flag = False
+    for num, landmarks in enumerate(faces[:, 5:]):
+        bbox = faces[num, 0:5]
+        imgpts, modelpts, rotate_degree, nose = face_orientation(frame, landmarks)  # roll, pitch, yaw
+        pose_angle = pose_det.det(frame_ori, bbox, frame)  # yaw pitch roll
 
 
-def precess_func(img):
-    img = cvb.rgb2bgr(img)
-    img = np.rot90(img, 3, axes=(0, 1))
-    img = img.copy()
-    return img
+        def get_normalized_pnt(nose, pnt):
+            global flag
+            nose = np.asarray(nose).reshape(2, )
+            pnt = np.asarray(pnt).reshape(2, )
+            dir = pnt - nose
+            norm = np.sqrt((dir ** 2).sum())
+            if norm > 10000:
+                print('pose norm is', norm)
+                flag = True
+            pnt = tuple(np.asarray(pnt).ravel())
+            # not normalize in fact
+            return pnt
 
 
-imgs = pims.ImageSequence('face.yy/id*/*.JPG', process_func=precess_func)
-imgs2 = pims.ImageSequence('face.yy2/id*/*.JPG', process_func=precess_func)
+        for imgpt in imgpts:
+            get_normalized_pnt(nose, imgpt)
+        if flag:
+            break
 
+        cv2.line(frame, nose, get_normalized_pnt(nose, imgpts[1]), (0, 255, 0), 3)  # GREEN
+        cv2.line(frame, nose, get_normalized_pnt(nose, imgpts[0]), (255, 0, 0,), 3)  # BLUE
+        cv2.line(frame, nose, get_normalized_pnt(nose, imgpts[2]), (0, 0, 255), 3)  # RED
+        remapping = [2, 3, 0, 4, 1]
 
-def detec_face(img):
-    img = img.copy()
-    im_shape = img.shape
-    # print(im_shape)
-    # target_size = scales[0]
-    # max_size = scales[1]
-    # im_size_min = np.min(im_shape[0:2])
-    # im_size_max = np.max(im_shape[0:2])
-    # if im_size_min > target_size or im_size_max > max_size:
-    #     im_scale = float(target_size) / float(im_size_min)
-    #     # prevent bigger axis from being more than max_size:
-    #     if np.round(im_scale * im_size_max) > max_size:
-    #         im_scale = float(max_size) / float(im_size_max)
-    #     img = cv2.resize(img, None, None, fx=im_scale, fy=im_scale)
-    # print('resize to', img.shape)
-    # for i in xrange(t-1): #warmup
-    #   faces = detector.detect(img)
-    timea = datetime.datetime.now()
-    faces = detector.detect(img, threshold=0.9)
-    timeb = datetime.datetime.now()
-    if faces.shape[0] != 0:
-        for num in range(faces.shape[0]):
-            # num=1
-            bbox = faces[num, 0:4]
-            score = faces[num, 4]
-            areas = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
-            # cvb.show_img(cvb.crop_img(img, bbox), wait_time=1000 * 20)
+        for index in range(len(landmarks) // 2):
+            random_color = random_colors[index]
 
-            cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-            kpoint = faces[num, 5:15]
-            for knum in range(5):
-                cv2.circle(img, (kpoint[2 * knum], kpoint[2 * knum + 1]), 1, [0, 0, 255], 2)
-        cv2.imwrite("res.jpg", img)
-        # cvb.show_img(img, wait_time=1000 * 20)
+            cv2.circle(frame, (landmarks[index * 2], landmarks[index * 2 + 1]), 5, random_color, -1)
+            # cv2.circle(frame, tuple(modelpts[remapping[index]].ravel().astype(int)), 2, random_color, -1)
 
-    diff = timeb - timea
-    # print('detection uses', diff.total_seconds(), 'seconds')
-    # print('find', faces.shape[0], 'faces')
+        for j in range(len(rotate_degree)):
+            color = [(0, 255, 0), (255, 0, 0), (0, 0, 255)][j]
+            cv2.putText(frame,
+                        ('{:05.2f}').format(float(rotate_degree[j])),
+                        (10, 30 + 50 * j + 170 * num), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                        color, thickness=2, lineType=2)
+        score = faces[num, 4]
+        if score < 0.9: continue
+        bbox = faces[num, 0:4]
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        if min(width, height) < 15: continue
+        rotate_degree = np.asarray(rotate_degree, int)
+        rotate_degree = np.abs(rotate_degree)
+        roll, pitch, yaw = rotate_degree
+        if pitch > 15 or yaw > 15: continue
+        print('roll pitch yaw ', roll, pitch, yaw)
+        # crop_face = cvb.crop_img(frame_ori, bbox)
+        # crop_face = cvb.crop_img(frame, bbox)
+        # cvb.show_img(crop_face, wait_time=1000 // 20)
 
-    return faces
+        kps = faces[num, 5:].reshape(5, 2)
+        warp_face = preprocess(frame_ori, bbox=bbox, landmark=kps)
+        # cvb.show_img(warp_face, wait_time=1000 // 20)
+        # cvb.show_img(warp_face, )
+        sim, norm = extractor.compare(warp_face, return_norm=True)
+        ind_gallery = sim.argmax()
+        # if sim[0, ind_gallery] > 0.1 and norm > 2.:
+        if norm > 3.5 and sim[0, ind_gallery] > 0.5:
+            print('!! sim is', sim[0, ind_gallery], 'norm ', norm)
+            img_gallery = list(extractor.yy_imgs.values())[ind_gallery]
+            img_gallery_norm = list(extractor.yy_feas_norms.values())[ind_gallery]
+            cv2.putText(img, f'id {int(ind_gallery)}', (int(bbox[0]),
+                                                        int(bbox[1] - 2 - 20)),
+                        cv2.FONT_HERSHEY_COMPLEX, 1.5, (0, 0, 255), 2, cv2.LINE_AA)
 
-# faces = detec_face(img)
-# print(faces.shape)
-# face = cvb.crop_img(img, faces[0,:4])
-# face_warp = preprocess(img, bbox=faces[0, :4],
-#                        landmark=faces[0, 5:15].reshape(-1, 2),
-#                        )
-# cvb.show_img(face_warp, wait_time=0)
+            if len(succs) == 0 or ind_gallery != succs[-1][-1]:
+                succs.append([img_gallery, warp_face, sim, norm, ind_gallery])
 
-def get_res(imgs):
-    res = {}
-    for img, path in zip(imgs, imgs._filepaths):
-        img = img.copy()
-        cls = path.split('/')[-1]
-        print(path)
-        # cvb.show_img(img, wait_time=0)
-        faces = detec_face(img)
-        assert faces.shape[0] >= 1
-        for ind_faces in range(faces.shape[0]):
-            bbox, score, kps = faces[ind_faces, :4], faces[ind_faces, 4], faces[ind_faces, 5:].reshape(5, 2)
-            area_face = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
-            area_ttl = img.shape[0] * img.shape[1]
-            iou = area_face / area_ttl
-            if iou < 0.005: continue
-            warp_face = preprocess(img, bbox=bbox,
-                                   landmark=kps
-                                   )
-            if warp_face.mean() > 200: continue
-            print(warp_face.mean())
-            # cvb.show_img(warp_face, wait_time=1000 // 20)
-            assert path not in res
-            res[path] = warp_face
+        # out_fn = f'face.{param_day}/gallery/{param_type}_{ind}_{num}.png'
+        # assert not osp.exists(out_fn)
+        # cvb.write_img(warp_face, out_fn)
+    if flag:
+        continue
+    max_succ = frame.shape[1] // 224
+    while len(succs) > max_succ:
+        succs.pop(0)
+    for ind, (img_gallery, warp_face, sim, norm, ind_gallery) in enumerate(succs[::-1]):
+        frame[- 112:,  # row
+        - (112 + 112 * ind * 2 + 10 * ind + 1):-(112 * ind * 2 + 10 * ind + 1),  # col
+        :] = img_gallery
 
-            # kp_templ = np.array([
-            #     [30.2946, 51.6963],
-            #     [65.5318, 51.5014],
-            #     [48.0252, 71.7366],
-            #     [33.5493, 92.3655],
-            #     [62.7299, 92.2041]], dtype=np.float32)
-            # if warp_face.shape[1] == 112:
-            #     kp_templ[:, 0] += 8.0
-            # kp_templ = kp_templ.ravel()
-            # for knum in range(5):
-            #     cv2.circle(warp_face, (kp_templ[2 * knum], kp_templ[2 * knum + 1]), 1, [0, 0, 255], 2)
-            # plt.imshow(warp_face[..., ::-1])
-            # plt.show()
+        frame[-112:,
+        -(112 + 112 * (ind * 2 + 1) + 10 * ind + 1): -(112 * (ind * 2 + 1) + 10 * ind + 1),
+        :] = warp_face
 
-        assert path in res
-    return res
+        cv2.putText(frame, f'sim {sim[0, ind_gallery]:.2f}',
+                    (frame.shape[1] - 112 - 112 * (ind * 2 + 1),  # col
+                     frame.shape[0] - 112),  # row
+                    cv2.FONT_HERSHEY_COMPLEX, .9, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(frame, f'norm {norm:.2f}',
+                    (frame.shape[1] - 112 - 112 * (ind * 2 + 1),  # col
+                     frame.shape[0] - 112 - 112 // 4),  # row
+                    cv2.FONT_HERSHEY_COMPLEX, .9, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(frame, f'ind {int(ind_gallery)}',
+                    (frame.shape[1] - 112 - 112 * (ind * 2 + 1),  # col
+                     frame.shape[0] - 112 - 112 // 4 * 2),  # row
+                    cv2.FONT_HERSHEY_COMPLEX, .6, (0, 0, 255), 2, cv2.LINE_AA)
 
+    cvb.show_img(frame, win_name='test', wait_time=1000 // 80)
+    video_writer.write(frame)
 
-res = get_res(imgs)
-res2 = get_res(imgs2)
-lz.msgpack_dump([res, res2], lz.work_path + 'yy.yy2.pk')
-
-# res = {}
-# for ind, frame in enumerate(v):
-#     frame = cvb.rgb2bgr(frame)
-#     faces = detec_face(frame)
-#     if faces.shape[0] != 0:
-#         res[ind] = faces
-#         logging.info(str(faces.shape))
-#     # if ind > 500: break
-#
-# lz.msgpack_dump(res, 'yy.mov.pk')
+video_writer.release()
