@@ -113,7 +113,6 @@ class SSHDetector:
                 # kpoint
                 kpoint_deltas = net_out[idx].asnumpy()
 
-
                 A = self._num_anchors['stride%s' % s]
                 K = height * width
 
