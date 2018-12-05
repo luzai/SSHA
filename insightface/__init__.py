@@ -17,17 +17,13 @@ from lz import *
 
 
 class FeaExtractor():
-    def __init__(self, day='yy'):
+    def __init__(self,  **kwargs):
         conf = get_config(False)
-        yy, yy2 = msgpack_load(work_path + 'yy.yy2.fea.pk')
-        self.yy = yy
-        self.yy2 = yy2
-        imgs1, imgs2 = msgpack_load(work_path + 'yy.yy2.pk')
-        self.yy_imgs = imgs1 if day == 'yy' else imgs2
-        self.yy_feas = yy if day == 'yy' else yy2
-        self.yy_feas_norms = {k: np.sqrt((fea ** 2).sum()) for k, fea in self.yy_feas.items()}
+        self.yy_imgs = kwargs.get('yy_imgs')
+        self.yy_feas = kwargs.get('yy_feas')
+        self.yy_feas_norms = kwargs.get('yy_feas_norms')
+
         learner = face_learner(conf, True)
-        # learner.threshold = 0.72
 
         if conf.device.type == 'cpu':
             learner.load_state(conf, 'cpu_final.pth', True, True)
@@ -40,7 +36,6 @@ class FeaExtractor():
         print('learner loaded')
         self.learner = learner
         self.conf = conf
-        self.day = day
 
     def extract_fea(self, res):
         res3 = {}
@@ -48,10 +43,9 @@ class FeaExtractor():
             res3[path] = self.extract_fea_from_img(img)
         return res3
 
-    def extract_fea_from_img(self, img, return_norm=False):  # img show be bgr
+    def extract_fea_from_img(self, img, return_norm=False):  # here img show be bgr
         learner = self.learner
         conf = self.conf
-        img = img.copy()[..., ::-1].reshape(112, 112, 3)
         img = Image.fromarray(img)
         mirror = transforms.functional.hflip(img)
         with torch.no_grad():
@@ -67,11 +61,7 @@ class FeaExtractor():
 
     def compare(self, img, return_norm=False):
         fea, norm = self.extract_fea_from_img(img, return_norm=True)
-        # imgs1, imgs2 = msgpack_load(work_path + 'yy.yy2.pk')
-        if self.day == 'yy':
-            sim = cal_sim([fea], list(self.yy.values()))
-        else:
-            sim = cal_sim([fea], list(self.yy2.values()))
+        sim = cal_sim([fea], list(self.yy_feas.values()))
         if not return_norm:
             return sim
         else:

@@ -29,8 +29,8 @@ def get_config(training=True):
     conf.start_eval = False
 
     conf.data_path = Path('/data2/share/')
-    conf.work_path = Path(lz.home_path +'prj/InsightFace_Pytorch/work_space/arcsft/')
-    # conf.work_path = Path('work_space/arcsft')
+    # conf.work_path = Path(lz.home_path +'prj/InsightFace_Pytorch/work_space/arcsft/')
+    conf.work_path = Path(lz.home_path +'prj/InsightFace_Pytorch/work_space/arcsft.triadap.s64.0.1/')
     conf.model_path = conf.work_path / 'models'
     conf.log_path = conf.work_path / 'log'
     conf.save_path = conf.work_path / 'save'

@@ -5,11 +5,11 @@ import datetime
 # sys.path.append('.')
 from ssha_detector import SSHDetector
 import lz
-from lz import *
 
-os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = '0'
 lz.init_dev(3)
+# scales = [1080*2, 1920*2]
 scales = [4032, 3024]
+# scales = [3024, 4032]
 #  3456, 4608
 
 detector = SSHDetector('./kmodel/e2e', 0)
@@ -21,11 +21,12 @@ import cvbase as cvb
 cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
 # src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29正、侧、背/正/'
-src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30正、侧、背/正/'
-# src_dir = work_path + '/youeryuan/20180930 新中二班-缪蕾老师班-29、30/中二班9月30日-正侧背/front/'
-# src_dir = work_path + '/youeryuan/20180930 新中二班-缪蕾老师班-29、30/中二班9月29日-正侧背/front/'
-v = pims.ImageSequence(src_dir + '/*.JPG')
-dst = f'{src_dir}/../'
+# v = pims.ImageSequence(src_dir+'/*.JPG')
+# dst = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29正、侧、背/'
+
+src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
+v = pims.ImageSequence(src_dir + '/*.jpg')
+dst = src_dir
 
 
 def detect_face(img, ind=None):
@@ -58,10 +59,8 @@ def detect_face(img, ind=None):
                 cv2.circle(img, (kpoint[2 * knum], kpoint[2 * knum + 1]), 1, [0, 0, 255], 2)
         if ind is None:
             ind = randomword()
-        cv2.imwrite(f"{dst}/proc/{ind}.png", img)
-        import cvbase as cvb
+        cvb.write_img(img, f"{dst}/proc/{ind}.png",  )
         cvb.show_img(img, 'test', wait_time=1000 // 80 * 80)
-        # cvb.show_img(img, 'test', wait_time=0)
 
     diff = timeb - timea
     print('detection uses', diff.total_seconds(), 'seconds')
@@ -74,31 +73,23 @@ def detect_face(img, ind=None):
 
 res = {}
 for ind, frame in enumerate(v):
+    imgfp = v._filepaths[ind]
+    imgfn = osp.basename(imgfp)
     frame = cvb.rgb2bgr(frame)
-    frame = np.rot90(frame, 3).copy()
-    faces = detect_face(frame, ind)
+    # frame = np.rot90(frame, 3).copy()
+    faces = detect_face(frame, imgfn)
     if faces.shape[0] != 0:
         res[ind] = faces
         logging.info(str(faces.shape))
-    if faces.shape[0] > 1:
-        logging.error('more than 1 face')
     for ind_faces in range(len(faces)):
         bbox, score, kps = faces[ind_faces, :4], faces[ind_faces, 4], faces[ind_faces, 5:].reshape(5, 2)
-        area_face = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
-        area_ttl = frame.shape[0] * frame.shape[1]
-        iou = area_face / area_ttl
-        if iou < 0.005:
-            logging.error('too small a face')
-            # raise ValueError()
-            continue
         warp_face = preprocess(frame, bbox=bbox,
                                landmark=kps
                                )
-        if warp_face.mean() > 200:
-            logging.error(f'{warp_face.mean()}')
-            # raise ValueError()
-            continue
-        cvb.write_img(warp_face, f'{dst}/face/{ind}.png')
+        # plt_imshow(face_img)
+        # plt.show()
+
+        cvb.write_img(warp_face, f'{dst}/face/{ind}.{ind_faces}.png')
         # if ind > 500: break
 
-lz.msgpack_dump(res, dst + 'face.pk')
+lz.msgpack_dump(res, dst + 'kpts.pk')

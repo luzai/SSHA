@@ -679,8 +679,18 @@ class face_learner(object):
             save_path = conf.save_path
         else:
             save_path = conf.model_path
-        # self.model.load_state_dict(torch.load(save_path / 'model_{}'.format(fixed_str)))
-        self.model.module.load_state_dict(torch.load(save_path / 'model_{}'.format(fixed_str)))
+        modelp = save_path / 'model_{}'.format(fixed_str)
+        if not os.path.exists(modelp):
+            fixed_strs = [t.name for t in save_path.glob('model*_*.pth')]
+            step = [fixed_str.split('_')[-2].split(':')[-1] for fixed_str in fixed_strs]
+            step = np.asarray(step, dtype= int )
+            step_ind = step.argmax()
+            fixed_str = fixed_strs[step_ind].replace('model_', '')
+        try:
+            # todo
+            self.model.module.load_state_dict(torch.load(save_path / 'model_{}'.format(fixed_str)))
+        except:
+            self.model.load_state_dict(torch.load(save_path / 'model_{}'.format(fixed_str)))
         if not model_only:
             self.head.load_state_dict(torch.load(save_path / 'head_{}'.format(fixed_str)))
             self.optimizer.load_state_dict(torch.load(save_path / 'optimizer_{}'.format(fixed_str)))
