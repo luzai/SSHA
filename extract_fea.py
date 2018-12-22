@@ -25,7 +25,7 @@ norms = {}
 for ind, imgp in enumerate(glob.glob(f'{src_dir}/*.png')):
     print(ind, imgp)
     img = cvb.read_img(imgp)
-    fea, norm = extractor.extract_fea_from_img(img, return_norm=True)  # BGR norm 4.75 # after 43 better
+    fea, norm = extractor.extract_fea_th(img, return_norm=True)  # BGR norm 4.75 # after 43 better
     feas[ind] = fea
     faces[ind] = img
     norms[ind] = norm
