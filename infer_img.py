@@ -97,7 +97,6 @@ for ind, faces in res.items():
                 return True
             return False
 
-
         ## rule one: pose dir norm
         flag = False
         for imgpt in imgpts:

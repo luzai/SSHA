@@ -12,7 +12,7 @@ import lz
 from torchvision import transforms
 from insightface.model import l2_norm
 
-import pims, cvbase as cvb
+import cvbase as cvb
 from lz import *
 from recognition.embedding import Embedding
 import sklearn
@@ -22,7 +22,7 @@ class FeaExtractor():
     def __init__(self, **kwargs):
         conf = get_config(False)
         self.yy_imgs = kwargs.get('yy_imgs')
-        self.mx = kwargs.get('mx', False)
+        self.mx = kwargs.get('mx', True)
 
         self.yy_feas = {}
         self.yy_feas_norms ={}
@@ -37,30 +37,30 @@ class FeaExtractor():
             self.learner = learner
         
         else:
-            model_path = root_path + '../insightface/Evaluation/IJB/pretrained_models/MS1MV2-ResNet100-Arcface/model'
+            model_path = root_path + '../insightface/logs/model-r100-arcface-ms1m-refine-v2/model'
             assert os.path.exists(os.path.dirname(model_path)), os.path.dirname(model_path)
             gpu_id = 0
             embedding = Embedding(model_path, 0, gpu_id)
             self.embedding = embedding
             print('mx embedding loaded')
         self.conf = conf
-        
-        for k, img in self.yy_imgs.items():
-            if self.mx:
-                fea, norm = self.extract_fea_from_img_mx(img, return_norm=True)
-            else:
-                fea, norm = self.extract_fea_from_img(img, return_norm=True)
-            self.yy_feas[k] = fea
-            self.yy_feas_norms[k] = norm
-            # break
+        if self.yy_imgs is not None:
+            for k, img in self.yy_imgs.items():
+                if self.mx:
+                    fea, norm = self.extract_fea_mx(img, return_norm=True)
+                else:
+                    fea, norm = self.extract_fea_th(img, return_norm=True)
+                self.yy_feas[k] = fea
+                self.yy_feas_norms[k] = norm
+
+    def extract_fea(self, img):
+        if self.mx:
+            fea, norm = self.extract_fea_mx(img, return_norm=True)
+        else:
+            fea, norm = self.extract_fea_th(img, return_norm=True)
+        return fea, norm
     
-    def extract_fea(self, res):
-        res3 = {}
-        for path, img in res.items():
-            res3[path] = self.extract_fea_from_img(img)
-        return res3
-    
-    def extract_fea_from_img(self, img, return_norm=False):  # here img show be bgr
+    def extract_fea_th(self, img, return_norm=False):  # here img show be bgr
         learner = self.learner
         conf = self.conf
         img = Image.fromarray(img)
@@ -76,7 +76,7 @@ class FeaExtractor():
         else:
             return fea, fea_norm
     
-    def extract_fea_from_img_mx(self, img, return_norm=False):
+    def extract_fea_mx(self, img, return_norm=False):
         fea = self.embedding.get(img, normalize=False)
         norm = np.sqrt( (fea ** 2).sum() )
         fea_n = sklearn.preprocessing.normalize(fea.reshape(1,-1)).flatten()
@@ -86,10 +86,7 @@ class FeaExtractor():
             return fea_n, norm
     
     def compare(self, img, return_norm=False):
-        if self.mx:
-            fea, norm = self.extract_fea_from_img_mx(img, return_norm=True)
-        else:
-            fea, norm = self.extract_fea_from_img(img, return_norm=True)
+        fea, norm = self.extract_fea(img)
         sim = cal_sim([fea], list(self.yy_feas.values()))
         if not return_norm:
             return sim
@@ -111,7 +108,7 @@ if __name__ == '__main__':
     imgs = pims.ImageSequence('/data2/xinglu/work/face.yy2/gallery/*.png')
     res = {}
     for ind, (img, p) in enumerate(zip(imgs, imgs._filepaths)):
-        _, norm = extractor.extract_fea_from_img(img, return_norm=True)
+        _, norm = extractor.extract_fea_th(img, return_norm=True)
         res[p] = (norm)
         # if ind>100:
         #     break
