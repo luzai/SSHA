@@ -42,12 +42,8 @@ from insightface import FeaExtractor
 face_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30正、侧、背/face/'
 
 yy_imgs = msgpack_load(f'{face_dir}/face.pk')
-yy_feas = msgpack_load(f'{face_dir}/fea.pk')
-yy_feas_norms = msgpack_load(f'{face_dir}/fea.norm.pk')
 extractor = FeaExtractor(
     yy_imgs=yy_imgs,
-    yy_feas=yy_feas,
-    yy_feas_norms=yy_feas_norms,
 )
 rec_info = []
 for ind, faces in res.items():

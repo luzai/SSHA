@@ -1,31 +1,24 @@
 import cv2
-import sys
-import numpy as np
 import datetime
 # sys.path.append('.')
 from ssha_detector import SSHDetector
 import lz
+import pims
+from lz import *
+import cvbase as cvb
+import itertools
 
 lz.init_dev(3)
-# scales = [1080*2, 1920*2]
 scales = [4032, 3024]
 # scales = [3024, 4032]
 #  3456, 4608
 
 detector = SSHDetector('./kmodel/e2e', 0)
-
-import pims
-from lz import *
-import cvbase as cvb
-
 cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29正、侧、背/正/'
-# v = pims.ImageSequence(src_dir+'/*.JPG')
-# dst = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29正、侧、背/'
-
 src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
-v = pims.ImageSequence(src_dir + '/*.jpg')
+vs = [glob.glob(src_dir + f'/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
+v = itertools.chain(vs)
 dst = src_dir
 
 
@@ -43,7 +36,7 @@ def detect_face(img, ind=None):
         if np.round(im_scale * im_size_max) > max_size:
             im_scale = float(max_size) / float(im_size_max)
         img = cv2.resize(img, None, None, fx=im_scale, fy=im_scale)
-
+        
         # print('resize to', img.shape)
     # for i in xrange(t-1): #warmup
     #   faces = detector.detect(img)
@@ -59,9 +52,9 @@ def detect_face(img, ind=None):
                 cv2.circle(img, (kpoint[2 * knum], kpoint[2 * knum + 1]), 1, [0, 0, 255], 2)
         if ind is None:
             ind = randomword()
-        cvb.write_img(img, f"{dst}/proc/{ind}.png",  )
+        cvb.write_img(img, f"{dst}/proc/{ind}.png", )
         cvb.show_img(img, 'test', wait_time=1000 // 80 * 80)
-
+    
     diff = timeb - timea
     print('detection uses', diff.total_seconds(), 'seconds')
     print('find', faces.shape[0], 'faces')
@@ -72,8 +65,8 @@ def detect_face(img, ind=None):
 
 
 res = {}
-for ind, frame in enumerate(v):
-    imgfp = v._filepaths[ind]
+for ind, imgfp in enumerate(v):
+    frame = cvb.read_img(imgfp)
     imgfn = osp.basename(imgfp)
     frame = cvb.rgb2bgr(frame)
     # frame = np.rot90(frame, 3).copy()
@@ -88,7 +81,7 @@ for ind, frame in enumerate(v):
                                )
         # plt_imshow(face_img)
         # plt.show()
-
+        
         cvb.write_img(warp_face, f'{dst}/face/{ind}.{ind_faces}.png')
         # if ind > 500: break
 
