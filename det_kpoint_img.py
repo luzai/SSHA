@@ -10,10 +10,8 @@ from insightface import FeaExtractor
 
 lz.init_dev(1)
 
-face_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30正、侧、背/face/'
-yy_imgs = msgpack_load(f'{face_dir}/face.pk')
 extractor = FeaExtractor(
-    yy_imgs=yy_imgs,
+    yy_imgs=None,
 )
 
 scales = [4032, 3024]  # scales = [3024, 4032] #  3456, 4608
