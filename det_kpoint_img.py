@@ -4,30 +4,43 @@ import torch, cv2
 from ssha_detector import SSHDetector
 import lz
 from lz import *
+
+lz.init_dev(get_dev())
+gpuid = 0
 import cvbase as cvb
 import itertools
 from insightface import FeaExtractor
+import face_alignment
 
-lz.init_dev(1)
+use_fan = True
+if use_fan:
+    fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=True,
+                                      device='cuda:' + str(gpuid))
 
 extractor = FeaExtractor(
-    yy_imgs=None,
+    yy_imgs=None, gpuid=gpuid,
 )
+print('face feature ex loaded ')
+scales = [3456, 3456]  # 3456, 4608
+# scales = [4700, 4700]  # 3456, 4608
+show = False  # False
+wait_time = 1000 * 10
+detector = SSHDetector('./kmodel/e2e', 0, ctx_id=gpuid)
+print('detector loader')
 
-scales = [4032, 3024]  # scales = [3024, 4032] #  3456, 4608
-show = False
-
-detector = SSHDetector('./kmodel/e2e', 0)
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
-vs = [glob.iglob(src_dir + f'/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
-v = itertools.chain(*vs)
+# src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
+src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29/'
+assert osp.exists(src_dir), src_dir
+vs = [glob.iglob(src_dir + f'/*.{suffix}', recursive=False) for suffix in get_img_suffix()]
+vseq = itertools.chain(*vs)
 dst = src_dir
 
 
 def detect_face(img, imgfn=None, save=False):
+    frame = img.copy()
     img = img.copy()
     im_shape = img.shape
     target_size = scales[0]
@@ -40,43 +53,65 @@ def detect_face(img, imgfn=None, save=False):
         if np.round(im_scale * im_size_max) > max_size:
             im_scale = float(max_size) / float(im_size_max)
         img = cv2.resize(img, None, None, fx=im_scale, fy=im_scale)
-
+        frame = cv2.resize(frame, None, None, fx=im_scale, fy=im_scale)
+    
     faces = detector.detect(img, threshold=0.9)  # todo critetion 1
     if faces.shape[0] != 0:
         for num in range(faces.shape[0]):
             score = faces[num, 4]
             assert score >= 0.9
-            bbox = faces[num, 0:4]
+            bbox = faces[num, 0:5]
             label_text = 'det {:.02f}'.format(bbox[4])
             cv2.putText(img, label_text, (int(bbox[0]),
                                           int(bbox[1] - 2)),
                         cv2.FONT_HERSHEY_COMPLEX, 1., (0, 255, 0), 2, cv2.LINE_AA)
             cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-            kpoint = faces[num, 5:15]
-            for knum in range(5):
-                cv2.circle(img, (kpoint[2 * knum], kpoint[2 * knum + 1]), 1, [0, 0, 255], 2)
+            if not use_fan:
+                kpoint = faces[num, 5:15]
+                for knum in range(5):
+                    cv2.circle(img, (kpoint[2 * knum], kpoint[2 * knum + 1]), 1, [0, 0, 255], 2)
+            else:
+                face_crop, bbox_bias = extend_bbox(frame, bbox, .3, .3, .3)
+                face_crop = cvb.bgr2rgb(face_crop)
+                lmks = fa.get_landmarks_from_image(face_crop)
+                if lmks is None:
+                    faces[num, 4] = 0.
+                    continue
+                lmks = lmks[0]
+                lmks[:, 0] += bbox_bias[0]
+                lmks[:, 1] += bbox_bias[1]
+                for lmk in lmks:
+                    cv2.circle(img, (lmk[0], lmk[1]), 1, [0, 0, 255], 2)
+                # face_crop2, _ = extend_bbox(img, bbox, .2, .2, .2)
+                kpoint = to_landmark5(lmks)
+                kpoint = kpoint.flatten()
+                faces[num, 5:15] = kpoint
+        
         if imgfn is None:
             imgfn = randomword()
         if save:
             cvb.write_img(img, f"{dst}/proc/{imgfn}.png", )
         if show:
-            cvb.show_img(img, 'test', wait_time=1000 // 80 * 80)
+            cvb.show_img(img, 'test', wait_time=wait_time)
     lz.timer.since_last_check(f'detection on 1 img, find {faces.shape[0]} faces')
     if 'im_scale' in locals() and im_scale != 1:
         faces[:, :4] /= im_scale
         faces[:, 5:] /= im_scale
+        img = cv2.resize(img, None, None, fx=1 / im_scale, fy=1 / im_scale)
+    
     return faces, img
 
 
-def align_face(frame, imgfn, faces, drawon):
-    img = frame = frame.copy()
+def align_face(frame, imgfn, faces, drawon, save=True, ):
+    info = []
+    frame = frame.copy()
     warp_faces = []
     for num, landmarks in enumerate(faces[:, 5:]):
         bbox = faces[num, 0:5]
         imgpts, modelpts, rotate_degree, nose = face_orientation(frame, landmarks)  # roll, pitch, yaw
-
+        
         # pose_angle = pose_det.det(frame_ori, bbox, frame)  # yaw pitch roll
-
+        
         def get_normalized_pnt(nose, pnt, ):
             nose = np.asarray(nose).reshape(2, )
             pnt = np.asarray(pnt).reshape(2, )
@@ -86,64 +121,109 @@ def align_face(frame, imgfn, faces, drawon):
                 print('pose norm is', norm)
                 return True
             return False
-
+        
         ## rule one: pose dir norm
         flag = False
         for imgpt in imgpts:
             flag = get_normalized_pnt(nose, imgpt)
         if flag:
             continue
-
+        
         cv2.line(drawon, nose, tuple(imgpts[1, 0, :]), (0, 255, 0), 3)  # GREEN
         cv2.line(drawon, nose, tuple(imgpts[0, 0, :]), (255, 0, 0,), 3)  # BLUE
         cv2.line(drawon, nose, tuple(imgpts[2, 0, :]), (0, 0, 255), 3)  # RED
         remapping = [2, 3, 0, 4, 1]
-
+        
         for index in range(len(landmarks) // 2):
             random_color = random_colors[index]
             cv2.circle(drawon, (landmarks[index * 2], landmarks[index * 2 + 1]), 5, random_color, -1)
             # cv2.circle(frame, tuple(modelpts[remapping[index]].ravel().astype(int)), 2, random_color, -1)
-
+        
         for j in range(len(rotate_degree)):
             color = [(0, 255, 0), (255, 0, 0), (0, 0, 255)][j]
             cv2.putText(drawon,
                         ('{:05.2f}').format(float(rotate_degree[j])),
                         (10, 30 + 50 * j + 170 * num), cv2.FONT_HERSHEY_SIMPLEX, 1,
                         color, thickness=2, lineType=2)
-        if show:
-            cvb.show_img(drawon, 'test', wait_time=1000 // 80 * 80)
-        cvb.write_img(drawon, f"{dst}/proc/{imgfn}.png", )
+        
         score = faces[num, 4]
-        ## rule
-        assert score >= 0.9
+        ## rule 1
+        if score < 0.9:
+            continue
         bbox = faces[num, 0:4]
         width = bbox[2] - bbox[0]
         height = bbox[3] - bbox[1]
-        ## rule
+        ## rule2
         if min(width, height) < 20: continue
         rotate_degree = np.asarray(rotate_degree, int)
         rotate_degree = np.abs(rotate_degree)
         roll, pitch, yaw = rotate_degree
-        ## rule
+        ## rule 3
         if pitch > 70 or yaw > 70: continue
         print('roll pitch yaw ', roll, pitch, yaw)
-
+        
         kps = faces[num, 5:].reshape(5, 2)
         warp_face = preprocess(frame, bbox=bbox, landmark=kps)
-        fea, norm = extractor.extract_fea(warp_face)
-        if norm <= 37: continue
         warp_faces.append(warp_face)
+        info.append({'kpt': kps, 'bbox': bbox, 'rpw': rotate_degree,
+                     'imgfn': imgfn
+                     })
+    if show:
+        cvb.show_img(drawon, 'test', wait_time=wait_time)
+    cvb.write_img(drawon, f"{dst}/proc/{imgfn}.jpg", )
+    return warp_faces, drawon, info
 
-    return warp_faces
+
+def norm_face(warp_faces, info):
+    res_faces = []
+    feas = []
+    norms = []
+    infonew = []
+    for warp_face, info_ in zip(warp_faces, info):
+        fea, norm = extractor.extract_fea(warp_face)
+        if norm <= 22: continue
+        res_faces.append(warp_face)
+        feas.append(fea)
+        norms.append(norms)
+        info_['norm'] = norm
+        info_['fea'] = fea
+        infonew.append(info_)
+    return res_faces, infonew
 
 
-res = {}
-for ind, imgfp in enumerate(v):
+mkdir_p(dst + '/face')
+# mkdir_p(dst + '/proc')
+detect_meter = AverageMeter()
+align_meter = AverageMeter()
+norm_meter = AverageMeter()
+timer.since_last_check('start ')
+
+all_info = []
+for ind_img, imgfp in enumerate(vseq):
+    # imgfp = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/IMG_9649.JPG'
+    logging.info(f"--- {imgfp} ---")
     frame = cvb.read_img(imgfp)
+    
     imgfn = osp.basename(imgfp)
-    frame = cvb.rgb2bgr(frame)
+    for suffix in get_img_suffix():
+        imgfn = imgfn.replace(suffix, '')
+    imgfn = imgfn.strip('.')
     # frame = np.rot90(frame, 3).copy()
+    
     faces_infos, drawon = detect_face(frame, imgfn)
-    faces_imgs, drawon = align_face(frame, imgfn, faces_infos, drawon)
+    detect_meter.update(timer.since_last_check(verbose=False))
+    
+    faces_imgs, drawon, info = align_face(frame, imgfn, faces_infos, drawon)
+    align_meter.update(timer.since_last_check(verbose=False))
+    
+    faces_imgs, info = norm_face(faces_imgs, info)
+    norm_meter.update(timer.since_last_check(verbose=False))
+    all_info.extend(info)
+    for ind, face in enumerate(faces_imgs):
+        cvb.write_img(face, f'{dst}/face/{imgfn}.{ind}.png')
 
-lz.msgpack_dump(res, dst + 'kpts.pk')
+lz.msgpack_dump(all_info, f'{dst}/face/info.pk')
+print('final how many imgs', ind_img,
+      'detect ', detect_meter.avg,
+      'align ', align_meter.avg,
+      'norm ', norm_meter.avg)

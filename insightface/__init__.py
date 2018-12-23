@@ -23,9 +23,9 @@ class FeaExtractor():
         conf = get_config(False)
         self.yy_imgs = kwargs.get('yy_imgs')
         self.mx = kwargs.get('mx', True)
-
+        
         self.yy_feas = {}
-        self.yy_feas_norms ={}
+        self.yy_feas_norms = {}
         if not self.mx:
             learner = face_learner(conf, True)
             learner.load_state(conf,
@@ -39,8 +39,7 @@ class FeaExtractor():
         else:
             model_path = root_path + '../insightface/logs/model-r100-arcface-ms1m-refine-v2/model'
             assert os.path.exists(os.path.dirname(model_path)), os.path.dirname(model_path)
-            gpu_id = 0
-            embedding = Embedding(model_path, 0, gpu_id)
+            embedding = Embedding(model_path, 0, kwargs.get('gpuid', 3))
             self.embedding = embedding
             print('mx embedding loaded')
         self.conf = conf
@@ -52,7 +51,7 @@ class FeaExtractor():
                     fea, norm = self.extract_fea_th(img, return_norm=True)
                 self.yy_feas[k] = fea
                 self.yy_feas_norms[k] = norm
-
+    
     def extract_fea(self, img):
         if self.mx:
             fea, norm = self.extract_fea_mx(img, return_norm=True)
@@ -76,10 +75,10 @@ class FeaExtractor():
         else:
             return fea, fea_norm
     
-    def extract_fea_mx(self, img, return_norm=False):
+    def extract_fea_mx(self, img, return_norm=False): # img bgr
         fea = self.embedding.get(img, normalize=False)
-        norm = np.sqrt( (fea ** 2).sum() )
-        fea_n = sklearn.preprocessing.normalize(fea.reshape(1,-1)).flatten()
+        norm = np.sqrt((fea ** 2).sum())
+        fea_n = sklearn.preprocessing.normalize(fea.reshape(1, -1)).flatten()
         if not return_norm:
             return fea_n
         else:
