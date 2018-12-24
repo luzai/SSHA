@@ -5,9 +5,8 @@ import lz
 from torch.nn import CrossEntropyLoss
 from torchvision import transforms as trans
 
-# lz.init_dev(lz.get_dev(n=1))
+# lz.init_dev( lz.get_dev() )
 # lz.init_dev((0, 1))
-
 
 def get_config(training=True):
     conf = edict()

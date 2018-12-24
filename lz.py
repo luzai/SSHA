@@ -923,6 +923,7 @@ def msgpack_dumps(obj, **kwargs):
 
 
 def msgpack_load(file, **kwargs):
+    assert osp.exists(file)
     import msgpack, gc, msgpack_numpy as m
     gc.disable()
     kwargs.setdefault('allow_np', True)
@@ -1090,8 +1091,10 @@ def show_img(path):
     return fig
 
 
-def plt_imshow(img, ax=None):
+def plt_imshow(img, inp_mode='rgb', ax=None, ):
     img = to_img(img)
+    if inp_mode == 'bgr':
+        img = img[..., ::-1]
     if ax is None:
         plt.figure()
         plt.imshow(img)
@@ -1550,12 +1553,19 @@ def face_orientation(frame, landmarks):
     )
     
     dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
+    
     (success, rotation_vector, translation_vector) = cv2.solvePnP(
         model_points, image_points, camera_matrix,
         dist_coeffs,
-        # flags=cv2.SOLVEPNP_ITERATIVE
+        flags=cv2.SOLVEPNP_ITERATIVE,
     )
     
+    # (  rotation_vector, translation_vector, success) = cv2.solvePnPRansac(
+    #         model_points, image_points, camera_matrix,
+    #         dist_coeffs,
+    #         # flags=cv2.SOLVEPNP_P3P,
+    #     )
+    print('retval is  ', success)
     axis = np.float32([[500, 0, 0],
                        [0, 500, 0],
                        [0, 0, 500]])
@@ -1764,7 +1774,8 @@ def extend_bbox(img_proc, bbox,
     width = min(width, img_shape[1] - col)
     row, col, height, width = map(lambda x: int(round(x)), [row, col, height, width])
     img_crop = img_proc[row:row + height, col:col + width, :]
-    return img_crop, np.asarray( [ col ,row, col+width, row+height] )
+    return img_crop, np.asarray([col, row, col + width, row + height])
+
 
 def to_landmark5(landmark):
     assert landmark.shape[0] == 68 or landmark.shape[0] == 5
@@ -1779,6 +1790,7 @@ def to_landmark5(landmark):
     else:
         landmark5 = landmark
     return landmark5
+
 
 def update_rcparams():
     from matplotlib import rcParams

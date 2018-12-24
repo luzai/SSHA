@@ -94,4 +94,4 @@ for ind, frame in enumerate(v):
         cvb.write_img(face_img, f'{dst}/face/{ind}.{randomword(5)}.png')
         # if ind > 500: break
 
-lz.msgpack_dump(res, dst + 'face.pk')
+lz.msgpack_dump(res, dst + 'info.pk')

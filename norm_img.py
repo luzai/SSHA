@@ -16,7 +16,7 @@ extractor = FeaExtractor(
 )
 print('face feature ex loaded ')
 
-show = True # False
+show = False # False
 wait_time = 1000 * 10
 
 # src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/face/'
