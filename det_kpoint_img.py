@@ -24,7 +24,9 @@ extractor = FeaExtractor(
 print('face feature ex loaded ')
 scales = [3456, 3456]  # 3456, 4608
 
-import hopenet
+from deep_pose import PoseDetector
+
+pose_det = PoseDetector()
 
 norm_thresh = 22
 min_face = 20
@@ -49,8 +51,8 @@ if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
 # src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
-src_dir ='/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/'
-# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
+# src_dir = '/datanew/caoyangpu/xinglu/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/'
+src_dir = '/datanew/caoyangpu/xinglu/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
 # src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29/'
 assert osp.exists(src_dir), src_dir
 vs = [glob.iglob(src_dir + f'/*.{suffix}', recursive=False) for suffix in get_img_suffix()]
@@ -73,8 +75,8 @@ def detect_face(img, imgfn=None, save=False):
             im_scale = float(max_size) / float(im_size_max)
         img = cv2.resize(img, None, None, fx=im_scale, fy=im_scale)
         frame = cv2.resize(frame, None, None, fx=im_scale, fy=im_scale)
-    
-    faces = detector.detect(img, threshold=0.9)  #   critetion 1
+
+    faces = detector.detect(img, threshold=0.9)  # critetion 1
     if faces.shape[0] != 0:
         for num in range(faces.shape[0]):
             score = faces[num, 4]
@@ -107,7 +109,7 @@ def detect_face(img, imgfn=None, save=False):
                 kpoint = to_landmark5(lmks)
                 kpoint = kpoint.flatten()
                 faces[num, 5:15] = kpoint
-        
+
         if imgfn is None:
             imgfn = randomword()
         if save:
@@ -119,8 +121,19 @@ def detect_face(img, imgfn=None, save=False):
         faces[:, :4] /= im_scale
         faces[:, 5:] /= im_scale
         img = cv2.resize(img, None, None, fx=1 / im_scale, fy=1 / im_scale)
-    
+
     return faces, img
+
+
+def get_normalized_pnt(nose, pnt, ):
+    nose = np.asarray(nose).reshape(2, )
+    pnt = np.asarray(pnt).reshape(2, )
+    dir = pnt - nose
+    norm = np.sqrt((dir ** 2).sum())
+    if norm > pose_norm:
+        print('pose norm is', norm)
+        return True
+    return False
 
 
 def align_face(frame, imgfn, faces, drawon, save=True, ):
@@ -129,49 +142,42 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
     warp_faces = []
     for num, landmarks in enumerate(faces[:, 5:]):
         bbox = faces[num, 0:5]
-        imgpts, modelpts, rotate_degree, nose = face_orientation(frame, landmarks)  # roll, pitch, yaw
-        
-        # pose_angle = pose_det.det(frame_ori, bbox, frame)  # yaw pitch roll
-        
-        def get_normalized_pnt(nose, pnt, ):
-            nose = np.asarray(nose).reshape(2, )
-            pnt = np.asarray(pnt).reshape(2, )
-            dir = pnt - nose
-            norm = np.sqrt((dir ** 2).sum())
-            if norm > pose_norm:
-                print('pose norm is', norm)
-                return True
-            return False
-        
+        imgpts, _, rotate_degree, nose = face_orientation(frame, landmarks)  # roll, pitch, yaw
         ## rule one: pose dir norm
         fail_flag = False
         for imgpt in imgpts:
             fail_flag = get_normalized_pnt(nose, imgpt)
-        
+
         if fail_flag:
-            continue
+            img_pose, bbox_bias = extend_bbox(frame, bbox)
+            yaw, pitch, roll = pose_det.det(img_pose, nose, drawon)
+            print('3d pose by 2d landmark fail, ',
+                  'roll, pitch, yaw ', rotate_degree,
+                  'roll, pitch, yaw now ', (roll, pitch, yaw) )
+            rotate_degree = (roll, pitch, yaw)
+
         else:
             cv2.line(drawon, nose, tuple(imgpts[1, 0, :]), (0, 255, 0), 3)  # GREEN
             cv2.line(drawon, nose, tuple(imgpts[0, 0, :]), (255, 0, 0,), 3)  # BLUE
             cv2.line(drawon, nose, tuple(imgpts[2, 0, :]), (0, 0, 255), 3)  # RED
-        
+
         for index in range(len(landmarks) // 2):
             random_color = random_colors[index]
             cv2.circle(drawon, (landmarks[index * 2], landmarks[index * 2 + 1]), 5, random_color, -1)
 
-        face_crop2, _ = extend_bbox(drawon, bbox, .2, .2, .2)
-        plt_imshow(face_crop2, 'bgr')
-        plt.show()
+        # face_crop2, _ = extend_bbox(drawon, bbox, .2, .2, .2)
+        # plt_imshow(face_crop2, 'bgr')
+        # plt.show()
         # plt_imshow(drawon)
         # plt.show()
-        
+
         for j in range(len(rotate_degree)):
             color = [(0, 255, 0), (255, 0, 0), (0, 0, 255)][j]
             cv2.putText(drawon,
                         ('{:05.2f}').format(float(rotate_degree[j])),
                         (10, 30 + 50 * j + 170 * num), cv2.FONT_HERSHEY_SIMPLEX, 1,
                         color, thickness=2, lineType=2)
-        
+
         score = faces[num, 4]
         ## rule 1
         if score < 0.9:
@@ -187,14 +193,14 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         ## rule 3
         if pitch > max_pith or yaw > max_yaw: continue
         print('roll pitch yaw ', roll, pitch, yaw)
-        
+
         kps = faces[num, 5:].reshape(5, 2)
         warp_face = preprocess(frame, bbox=bbox, landmark=kps)
         # plt_imshow(warp_face)
         # plt.show()
-        
+
         warp_faces.append(warp_face)
-        
+
         info.append({'kpt': kps, 'bbox': bbox, 'rpw': rotate_degree,
                      'imgfn': imgfn
                      })
@@ -232,28 +238,30 @@ timer.since_last_check('start ')
 
 all_info = []
 for ind_img, imgfp in enumerate(vseq):
-    imgfp = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/正/IMG_9551.JPG' # 9551
+    # imgfp = '/datanew/caoyangpu/xinglu/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/正/IMG_9551.JPG'  # 9551
     logging.info(f"--- {imgfp} ---")
     frame = cvb.read_img(imgfp)
-    
+
     imgfn = osp.basename(imgfp)
     for suffix in get_img_suffix():
         imgfn = imgfn.replace(suffix, '')
     imgfn = imgfn.strip('.')
     # frame = np.rot90(frame, 3).copy()
-    
+
     faces_infos, drawon = detect_face(frame, imgfn)
     detect_meter.update(timer.since_last_check(verbose=False))
-    
+
     faces_imgs, drawon, info = align_face(frame, imgfn, faces_infos, drawon)
     align_meter.update(timer.since_last_check(verbose=False))
-    
+
     faces_imgs, info = norm_face(faces_imgs, info)
     norm_meter.update(timer.since_last_check(verbose=False))
     all_info.extend(info)
     for ind, face in enumerate(faces_imgs):
         cvb.write_img(face, f'{dst}/face/{imgfn}.{ind}.png')
-    break
+    #     plt_imshow(face,'bgr' )
+    #     plt.show()
+    # break
 lz.msgpack_dump(all_info, f'{dst}/face/info.pk')
 print('final how many imgs', ind_img,
       'detect ', detect_meter.avg,
