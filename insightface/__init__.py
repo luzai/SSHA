@@ -1,8 +1,6 @@
-import cv2
 from PIL import Image
 import argparse
 from pathlib import Path
-from multiprocessing import Process, Pipe, Value, Array
 import torch
 from insightface.config import get_config
 from insightface.mtcnn import MTCNN
@@ -22,14 +20,14 @@ class FeaExtractor():
     def __init__(self, **kwargs):
         conf = get_config(False)
         self.yy_imgs = kwargs.get('yy_imgs')
-        self.mx = kwargs.get('mx', True)
+        self.mx = kwargs.get('mx', False)
         
         self.yy_feas = {}
         self.yy_feas_norms = {}
         if not self.mx:
             learner = face_learner(conf, True)
+            conf.work_path = conf.save_path = conf.model_path  =Path('./kmodel/')
             learner.load_state(conf,
-                               # '2018-10-24-12-02_accuracy:0.876_step:304456_final.pth'
                                'ir_se50.pth'
                                , True, True)
             learner.model.eval()
@@ -38,7 +36,7 @@ class FeaExtractor():
         
         else:
             model_path = root_path + '../insightface/logs/model-r100-arcface-ms1m-refine-v2/model'
-            assert os.path.exists(os.path.dirname(model_path)), os.path.dirname(model_path)
+            assert os.path.exists(os.path.dirname(model_path)),'you need download model to use mxnet version'
             embedding = Embedding(model_path, 0, kwargs.get('gpuid', 3))
             self.embedding = embedding
             print('mx embedding loaded')
@@ -92,23 +90,3 @@ class FeaExtractor():
         else:
             return sim, norm
 
-
-if __name__ == '__main__':
-    lz.init_dev(lz.get_dev())
-    extractor = FeaExtractor()
-    # imgs1, imgs2 = msgpack_load(work_path + 'yy.yy2.pk')
-    # # plt_imshow(list(imgs1.values())[0])
-    # # plt.show()
-    # extractor.compare(list(imgs1.values())[0])
-    # fea1 = extractor.extract_fea(imgs1)
-    # fea2 = extractor.extract_fea(imgs2)
-    # # lz.msgpack_dump([fea1, fea2], work_path + 'yy.yy2.fea.pk')
-    
-    imgs = pims.ImageSequence('/data2/xinglu/work/face.yy2/gallery/*.png')
-    res = {}
-    for ind, (img, p) in enumerate(zip(imgs, imgs._filepaths)):
-        _, norm = extractor.extract_fea_th(img, return_norm=True)
-        res[p] = (norm)
-        # if ind>100:
-        #     break
-    lz.msgpack_dump(res, work_path + 't.pk')

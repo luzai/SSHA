@@ -5,7 +5,7 @@ from ssha_detector import SSHDetector
 import lz
 from lz import *
 
-lz.init_dev((1,))
+lz.init_dev((3,))
 # lz.init_dev(get_dev())
 gpuid = 0
 import cvbase as cvb
@@ -17,7 +17,7 @@ use_fan = True
 if use_fan:
     fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=True,
                                       device='cuda:' + str(gpuid))
-
+fa.get_landmarks_from_image(np.random.rand(336, 336, 3))
 extractor = FeaExtractor(
     yy_imgs=None, gpuid=gpuid,
 )
@@ -28,19 +28,19 @@ from deep_pose import PoseDetector
 
 pose_det = PoseDetector()
 
-norm_thresh = 22
+norm_thresh = 2
 min_face = 20
 max_pith = 70
 max_yaw = 70
 det_score_thresh = .9
 pose_norm = 10000
 
-norm_thresh = 18
-min_face = 20
-max_pith = 45
-max_yaw = 45
-det_score_thresh = .9
-pose_norm = 10000
+# norm_thresh = 3
+# min_face = 20
+# max_pith = 45
+# max_yaw = 45
+# det_score_thresh = .9
+# pose_norm = 10000
 
 show = False  # False
 wait_time = 1000 * 10
@@ -50,13 +50,14 @@ print('detector loader')
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-# src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
-# src_dir = '/datanew/caoyangpu/xinglu/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/'
-src_dir = '/datanew/caoyangpu/xinglu/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
-# src_dir = f'{work_path}/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.29/9.29/'
+# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/'
+src_dir = lz.root_path + '/test_image'
 assert osp.exists(src_dir), src_dir
-vs = [glob.iglob(src_dir + f'/*.{suffix}', recursive=False) for suffix in get_img_suffix()]
+vs = [glob.iglob(src_dir + f'/**/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
 vseq = itertools.chain(*vs)
+vseq = list(vseq)
+vseq = [v for v in vseq if 'proc' not in v and 'face' not in v]
+assert vseq, 'chk dir, empty?'
 dst = src_dir
 
 
@@ -75,8 +76,8 @@ def detect_face(img, imgfn=None, save=False):
             im_scale = float(max_size) / float(im_size_max)
         img = cv2.resize(img, None, None, fx=im_scale, fy=im_scale)
         frame = cv2.resize(frame, None, None, fx=im_scale, fy=im_scale)
-
-    faces = detector.detect(img, threshold=0.9)  # critetion 1
+    
+    faces = detector.detect(img, threshold=0.9)  #   critetion 1
     if faces.shape[0] != 0:
         for num in range(faces.shape[0]):
             score = faces[num, 4]
@@ -109,7 +110,7 @@ def detect_face(img, imgfn=None, save=False):
                 kpoint = to_landmark5(lmks)
                 kpoint = kpoint.flatten()
                 faces[num, 5:15] = kpoint
-
+        
         if imgfn is None:
             imgfn = randomword()
         if save:
@@ -121,7 +122,7 @@ def detect_face(img, imgfn=None, save=False):
         faces[:, :4] /= im_scale
         faces[:, 5:] /= im_scale
         img = cv2.resize(img, None, None, fx=1 / im_scale, fy=1 / im_scale)
-
+    
     return faces, img
 
 
@@ -147,7 +148,7 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         fail_flag = False
         for imgpt in imgpts:
             fail_flag = get_normalized_pnt(nose, imgpt)
-
+        
         if fail_flag:
             img_pose, bbox_bias = extend_bbox(frame, bbox)
             yaw, pitch, roll = pose_det.det(img_pose, nose, drawon)
@@ -160,7 +161,7 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
             cv2.line(drawon, nose, tuple(imgpts[1, 0, :]), (0, 255, 0), 3)  # GREEN
             cv2.line(drawon, nose, tuple(imgpts[0, 0, :]), (255, 0, 0,), 3)  # BLUE
             cv2.line(drawon, nose, tuple(imgpts[2, 0, :]), (0, 0, 255), 3)  # RED
-
+        
         for index in range(len(landmarks) // 2):
             random_color = random_colors[index]
             cv2.circle(drawon, (landmarks[index * 2], landmarks[index * 2 + 1]), 5, random_color, -1)
@@ -170,14 +171,14 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         # plt.show()
         # plt_imshow(drawon)
         # plt.show()
-
+        
         for j in range(len(rotate_degree)):
             color = [(0, 255, 0), (255, 0, 0), (0, 0, 255)][j]
             cv2.putText(drawon,
                         ('{:05.2f}').format(float(rotate_degree[j])),
                         (10, 30 + 50 * j + 170 * num), cv2.FONT_HERSHEY_SIMPLEX, 1,
                         color, thickness=2, lineType=2)
-
+        
         score = faces[num, 4]
         ## rule 1
         if score < 0.9:
@@ -193,14 +194,14 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         ## rule 3
         if pitch > max_pith or yaw > max_yaw: continue
         print('roll pitch yaw ', roll, pitch, yaw)
-
+        
         kps = faces[num, 5:].reshape(5, 2)
         warp_face = preprocess(frame, bbox=bbox, landmark=kps)
         # plt_imshow(warp_face)
         # plt.show()
-
+        
         warp_faces.append(warp_face)
-
+        
         info.append({'kpt': kps, 'bbox': bbox, 'rpw': rotate_degree,
                      'imgfn': imgfn
                      })
@@ -241,27 +242,26 @@ for ind_img, imgfp in enumerate(vseq):
     # imgfp = '/datanew/caoyangpu/xinglu/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/正/IMG_9551.JPG'  # 9551
     logging.info(f"--- {imgfp} ---")
     frame = cvb.read_img(imgfp)
-
+    
     imgfn = osp.basename(imgfp)
     for suffix in get_img_suffix():
         imgfn = imgfn.replace(suffix, '')
     imgfn = imgfn.strip('.')
     # frame = np.rot90(frame, 3).copy()
-
+    
     faces_infos, drawon = detect_face(frame, imgfn)
     detect_meter.update(timer.since_last_check(verbose=False))
-
+    
     faces_imgs, drawon, info = align_face(frame, imgfn, faces_infos, drawon)
     align_meter.update(timer.since_last_check(verbose=False))
-
+    
     faces_imgs, info = norm_face(faces_imgs, info)
     norm_meter.update(timer.since_last_check(verbose=False))
     all_info.extend(info)
     for ind, face in enumerate(faces_imgs):
+        lz.mkdir_p(f'{dst}/face/', delete=False)
         cvb.write_img(face, f'{dst}/face/{imgfn}.{ind}.png')
-    #     plt_imshow(face,'bgr' )
-    #     plt.show()
-    # break
+lz.mkdir_p(f'{dst}/face/', delete=False)
 lz.msgpack_dump(all_info, f'{dst}/face/info.pk')
 print('final how many imgs', ind_img,
       'detect ', detect_meter.avg,

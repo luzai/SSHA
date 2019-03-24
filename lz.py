@@ -557,12 +557,19 @@ def df2md(df1):
     return tabulate.tabulate(df1, headers="keys", tablefmt="pipe")
 
 
-def stat_np(array):
-    return np.min(array), np.mean(array), np.median(array), np.max(array)
-
-
-def stat_th(tensor):
-    return torch.min(tensor), torch.mean(tensor), torch.median(tensor), torch.max(tensor)
+def stat(arr):
+    def stat_np(array):
+        array = np.asarray(array)
+        return np.min(array), np.mean(array), np.median(array), np.max(array), np.shape(array)
+    
+    def stat_th(tensor):
+        return torch.min(tensor).item(), torch.mean(tensor).item(), torch.median(tensor).item(), torch.max(
+            tensor).item()
+    
+    if type(arr).__module__ == 'numpy':
+        return stat_np(arr)
+    else:
+        return stat_th(arr)
 
 
 def sel_np(A):

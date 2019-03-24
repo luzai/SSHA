@@ -684,6 +684,8 @@ class face_learner(object):
             fixed_strs = [t.name for t in save_path.glob('model*_*.pth')]
             step = [fixed_str.split('_')[-2].split(':')[-1] for fixed_str in fixed_strs]
             step = np.asarray(step, dtype= int )
+            if len(step) == 0:
+                raise ValueError('chk your model, download and put to correct dir')
             step_ind = step.argmax()
             fixed_str = fixed_strs[step_ind].replace('model_', '')
         try:
