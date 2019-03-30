@@ -4,14 +4,15 @@ import torch, cv2
 from ssha_detector import SSHDetector
 import lz
 from lz import *
-
-# lz.init_dev((2,))
-lz.init_dev(get_dev())
-gpuid = 0
 import cvbase as cvb
 import itertools
 from insightface import FeaExtractor
 import face_alignment
+from deep_pose import PoseDetector
+
+# lz.init_dev((2,))
+lz.init_dev(get_dev())
+gpuid = 0
 
 use_fan = True
 if use_fan:
@@ -24,34 +25,35 @@ extractor = FeaExtractor(
 print('face feature ex loaded ')
 scales = [3456, 3456]  # 3456, 4608
 
-from deep_pose import PoseDetector
-
 pose_det = PoseDetector()
 
-norm_thresh = 41
-min_face = 20
-max_pith = 70
-max_yaw = 70
-det_score_thresh = .9
-pose_norm = 10000
-
+# if imgs are good
 # norm_thresh = 42
 # min_face = 20
-# max_pith = 45
-# max_yaw = 45
-# det_score_thresh = .9
+# max_pith = 70
+# max_yaw = 70
+# det_score_thresh = .99
 # pose_norm = 10000
 
+# if we need to be strict
+norm_thresh = 55
+min_face = 20
+max_pith = 45
+max_yaw = 45
+det_score_thresh = .99
+pose_norm = 10000
+
 show = False
-wait_time = 1000 * 10
+show_face = False
+wait_time = 1000 * 1
 detector = SSHDetector('./kmodel/e2e', 0, ctx_id=gpuid)
-print('detector loader')
+logging.info('detector loader succ')
 
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
-# src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
+# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
+src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
 assert osp.exists(src_dir), src_dir
 vs = [glob.iglob(src_dir + f'/**/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
 vseq = itertools.chain(*vs)
@@ -77,7 +79,7 @@ def detect_face(img, imgfn=None, save=False):
         img = cv2.resize(img, None, None, fx=im_scale, fy=im_scale)
         frame = cv2.resize(frame, None, None, fx=im_scale, fy=im_scale)
     
-    faces = detector.detect(img, threshold=0.9)  #   critetion 1
+    faces = detector.detect(img, threshold=det_score_thresh)  # critetion 1
     if faces.shape[0] != 0:
         for num in range(faces.shape[0]):
             score = faces[num, 4]
@@ -154,9 +156,8 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
             yaw, pitch, roll = pose_det.det(img_pose, nose, drawon)
             print('3d pose by 2d landmark fail, ',
                   'roll, pitch, yaw ', rotate_degree,
-                  'roll, pitch, yaw now ', (roll, pitch, yaw) )
+                  'roll, pitch, yaw now ', (roll, pitch, yaw))
             rotate_degree = (roll, pitch, yaw)
-
         else:
             cv2.line(drawon, nose, tuple(imgpts[1, 0, :]), (0, 255, 0), 3)  # GREEN
             cv2.line(drawon, nose, tuple(imgpts[0, 0, :]), (255, 0, 0,), 3)  # BLUE
@@ -165,7 +166,7 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         for index in range(len(landmarks) // 2):
             random_color = random_colors[index]
             cv2.circle(drawon, (landmarks[index * 2], landmarks[index * 2 + 1]), 5, random_color, -1)
-
+        
         # face_crop2, _ = extend_bbox(drawon, bbox, .2, .2, .2)
         # plt_imshow(face_crop2, 'bgr')
         # plt.show()
@@ -180,13 +181,12 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
                         color, thickness=2, lineType=2)
         
         score = faces[num, 4]
-        ## rule 1
-        if score < 0.9:
-            continue
+        ## rule detection score
+        if score < det_score_thresh: continue
         bbox = faces[num, 0:4]
         width = bbox[2] - bbox[0]
         height = bbox[3] - bbox[1]
-        ## rule2
+        ## rule face size
         if min(width, height) < min_face: continue
         rotate_degree = np.asarray(rotate_degree, int)
         rotate_degree = np.abs(rotate_degree)
@@ -197,7 +197,8 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         
         kps = faces[num, 5:].reshape(5, 2)
         warp_face = preprocess(frame, bbox=bbox, landmark=kps)
-        # plt_imshow(warp_face)
+        
+            # plt_imshow(warp_face)
         # plt.show()
         
         warp_faces.append(warp_face)
@@ -217,9 +218,12 @@ def norm_face(warp_faces, info):
     ind = 0
     for warp_face, info_ in zip(warp_faces, info):
         fea, norm = extractor.extract_fea(warp_face)
+        logging.info(f'face norm is {norm}')
+        # rule: face norm
         if norm <= norm_thresh:
-            print('norm skip', norm, )
             continue
+        if show_face:
+            cvb.show_img(warp_face, 'test', wait_time=wait_time)
         res_faces.append(warp_face)
         info_['norm'] = norm
         info_['fea'] = fea

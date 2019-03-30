@@ -65,7 +65,6 @@ class FeaExtractor():
         with torch.no_grad():
             fea, prenorm_fea = learner.model(x=conf.test_transform(img).cuda().unsqueeze(0), return_norm=True)
             fea_norm = np.sqrt((to_numpy(prenorm_fea) ** 2).sum())
-            print('--> face norm', fea_norm)
             fea_mirror = learner.model(x=conf.test_transform(mirror).cuda().unsqueeze(0))
             fea = l2_norm(fea + fea_mirror).cpu().numpy().reshape(512)
         if not return_norm:
