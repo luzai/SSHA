@@ -30,7 +30,7 @@ import itertools
 import torch
 from pathlib import Path
 from torch.utils.data import DataLoader
-from insightface.config import gl_conf
+from insightface.config import conf as gl_conf
 import torch.autograd
 import torch.multiprocessing as mp
 
@@ -461,72 +461,54 @@ class Dataset2(object):
 class face_learner(object):
     def __init__(self, conf, inference=False, need_loader=True):
         print(conf)
-        if conf.use_mobilfacenet:
-            # self.model = MobileFaceNet(conf.embedding_size).to(conf.device)
-            self.model = torch.nn.DataParallel(MobileFaceNet(conf.embedding_size)).cuda()
-            print('MobileFaceNet model generated')
+        # self.model = Backbone(conf.net_depth, conf.drop_ratio, conf.net_mode).to(conf.device)
+        self.model = torch.nn.DataParallel(Backbone(conf.net_depth, conf.drop_ratio, conf.net_mode)).cuda()
+        print('{}_{} model generated'.format(conf.net_mode, conf.net_depth))
+
+        self.milestones = conf.milestones
+        if need_loader:
+            # self.loader, self.class_num = get_train_loader(conf)
+
+            self.dataset = Dataset2()
+            self.loader = DataLoader(
+                self.dataset, batch_size=conf.batch_size, num_workers=conf.num_workers,
+                shuffle=True, pin_memory=True
+            )
+
+            # self.loader = Loader2(conf)
+            self.class_num = 85164
+            print(self.class_num, 'classes, load ok ')
         else:
-            # self.model = Backbone(conf.net_depth, conf.drop_ratio, conf.net_mode).to(conf.device)
-            self.model = torch.nn.DataParallel(Backbone(conf.net_depth, conf.drop_ratio, conf.net_mode)).cuda()
-            print('{}_{} model generated'.format(conf.net_mode, conf.net_depth))
-
-        if not inference:
-            self.milestones = conf.milestones
-            if need_loader:
-                # self.loader, self.class_num = get_train_loader(conf)
-
-                self.dataset = Dataset2()
-                self.loader = DataLoader(
-                    self.dataset, batch_size=conf.batch_size, num_workers=conf.num_workers,
-                    shuffle=True, pin_memory=True
-                )
-
-                # self.loader = Loader2(conf)
-                self.class_num = 85164
-                print(self.class_num, 'classes, load ok ')
-            else:
-                import copy
-                conf_t = copy.deepcopy(conf)
-                conf_t.data_mode = 'emore'
-                self.loader, self.class_num = get_train_loader(conf_t)
-                print(self.class_num)
-                self.class_num = 85164
-            lz.mkdir_p(conf.log_path, delete=True
-                       )
-            self.writer = SummaryWriter(conf.log_path)
-            self.step = 0
-            if conf.loss == 'arcface':
-                self.head = Arcface(embedding_size=conf.embedding_size, classnum=self.class_num).to(conf.device)
-            elif conf.loss == 'softmax':
-                self.head = MySoftmax(embedding_size=conf.embedding_size, classnum=self.class_num).to(conf.device)
-            else:
-                raise ValueError(f'{conf.loss}')
-
-            print('two model heads generated')
-
-            paras_only_bn, paras_wo_bn = separate_bn_paras(self.model)
-
-            if conf.use_mobilfacenet:
-                self.optimizer = optim.SGD([
-                    {'params': paras_wo_bn[:-1], 'weight_decay': 4e-5},
-                    {'params': [paras_wo_bn[-1]] + [self.head.kernel], 'weight_decay': 4e-4},
-                    {'params': paras_only_bn}
-                ], lr=conf.lr, momentum=conf.momentum)
-            else:
-                self.optimizer = optim.SGD([
-                    {'params': paras_wo_bn + [self.head.kernel], 'weight_decay': 5e-4},
-                    {'params': paras_only_bn}
-                ], lr=conf.lr, momentum=conf.momentum)
-            print(self.optimizer)
-            # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=40, verbose=True)
-            print('optimizers generated')
-            self.board_loss_every = 100  # len(self.loader) // 100
-            self.evaluate_every = len(self.loader) // 10
-            self.save_every = len(self.loader) // 5
-            self.agedb_30, self.cfp_fp, self.lfw, self.agedb_30_issame, self.cfp_fp_issame, self.lfw_issame = get_val_data(
-                self.loader.dataset.root_path)
+            import copy
+            conf_t = copy.deepcopy(conf)
+            conf_t.data_mode = 'emore'
+            self.loader, self.class_num = get_train_loader(conf_t)
+            print(self.class_num)
+            self.class_num = 85164
+        lz.mkdir_p(conf.log_path, delete=True
+                   )
+        self.writer = SummaryWriter(str(conf.log_path))
+        self.step = 0
+        if conf.loss == 'arcface':
+            self.head = Arcface(embedding_size=conf.embedding_size, classnum=self.class_num).to(conf.device)
+        elif conf.loss == 'softmax':
+            self.head = MySoftmax(embedding_size=conf.embedding_size, classnum=self.class_num).to(conf.device)
         else:
-            self.threshold = conf.threshold
+            raise ValueError(f'{conf.loss}')
+        print('two model heads generated')
+        paras_only_bn, paras_wo_bn = separate_bn_paras(self.model)
+        self.optimizer = optim.SGD([
+            {'params': paras_wo_bn + [self.head.kernel], 'weight_decay': 5e-4},
+            {'params': paras_only_bn}
+        ], lr=conf.lr, momentum=conf.momentum)
+        print(self.optimizer)
+        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=40, verbose=True)
+        print('optimizers generated')
+        self.board_loss_every = 100  # len(self.loader) // 100
+        self.evaluate_every = len(self.loader) // 10
+        self.save_every = len(self.loader) // 5
+        self.agedb_30, self.cfp_fp, self.lfw, self.agedb_30_issame, self.cfp_fp_issame, self.lfw_issame = get_val_data(
+            self.loader.dataset.root_path)
 
     def train(self, conf, epochs):
         self.model.train()
@@ -674,28 +656,39 @@ class face_learner(object):
                                              ('optimizer_{}_accuracy:{}_step:{}_{}.pth'.format(get_time(), accuracy,
                                                                                                self.step, extra)))
 
-    def load_state(self, conf, fixed_str, from_save_folder=False, model_only=False):
-        if from_save_folder:
-            save_path = conf.save_path
-        else:
-            save_path = conf.model_path
-        modelp = save_path / 'model_{}'.format(fixed_str)
-        if not os.path.exists(modelp):
+    def load_state(self, fixed_str=None,
+                   resume_path=None, latest=True,
+                   ):
+        from pathlib import Path
+        save_path = Path(resume_path)
+        modelp = save_path / '{}'.format(fixed_str)
+        if not modelp.exists():
+            modelp = save_path / 'model_{}'.format(fixed_str)
+        if not (modelp).exists():
             fixed_strs = [t.name for t in save_path.glob('model*_*.pth')]
-            step = [fixed_str.split('_')[-2].split(':')[-1] for fixed_str in fixed_strs]
-            step = np.asarray(step, dtype= int )
-            if len(step) == 0:
-                raise ValueError('chk your model, download and put to correct dir')
+            if latest:
+                step = [fixed_str.split('_')[-2].split(':')[-1] for fixed_str in fixed_strs]
+            else:  # best
+                step = [fixed_str.split('_')[-3].split(':')[-1] for fixed_str in fixed_strs]
+            step = np.asarray(step, dtype=float)
             step_ind = step.argmax()
             fixed_str = fixed_strs[step_ind].replace('model_', '')
-        try:
-            # todo
-            self.model.module.load_state_dict(torch.load(save_path / 'model_{}'.format(fixed_str)))
-        except:
-            self.model.load_state_dict(torch.load(save_path / 'model_{}'.format(fixed_str)))
-        if not model_only:
-            self.head.load_state_dict(torch.load(save_path / 'head_{}'.format(fixed_str)))
-            self.optimizer.load_state_dict(torch.load(save_path / 'optimizer_{}'.format(fixed_str)))
+            modelp = save_path / 'model_{}'.format(fixed_str)
+        logging.info(f'you are using gpu, load model, {modelp}')
+        model_state_dict = torch.load(str(modelp), map_location=lambda storage, loc: storage)
+        model_state_dict = {k: v for k, v in model_state_dict.items() if 'num_batches_tracked' not in k}
+        if gl_conf.cvt_ipabn:
+            import copy
+            model_state_dict2 = copy.deepcopy(model_state_dict)
+            for k in model_state_dict2.keys():
+                if 'running_mean' in k:
+                    name = k.replace('running_mean', 'weight')
+                    model_state_dict2[name] = torch.abs(model_state_dict[name])
+            model_state_dict = model_state_dict2
+        if list(model_state_dict.keys())[0].startswith('module'):
+            self.model.load_state_dict(model_state_dict, strict=True, )
+        else:
+            self.model.module.load_state_dict(model_state_dict, strict=True, )
 
     def board_val(self, db_name, accuracy, best_threshold, roc_curve_tensor):
         self.writer.add_scalar('{}_accuracy'.format(db_name), accuracy, self.step)

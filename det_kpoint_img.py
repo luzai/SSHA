@@ -5,8 +5,8 @@ from ssha_detector import SSHDetector
 import lz
 from lz import *
 
-lz.init_dev((3,))
-# lz.init_dev(get_dev())
+# lz.init_dev((2,))
+lz.init_dev(get_dev())
 gpuid = 0
 import cvbase as cvb
 import itertools
@@ -28,7 +28,7 @@ from deep_pose import PoseDetector
 
 pose_det = PoseDetector()
 
-norm_thresh = 2
+norm_thresh = 4
 min_face = 20
 max_pith = 70
 max_yaw = 70
@@ -50,8 +50,8 @@ print('detector loader')
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/'
-src_dir = lz.root_path + '/test_image'
+# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
+src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
 assert osp.exists(src_dir), src_dir
 vs = [glob.iglob(src_dir + f'/**/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
 vseq = itertools.chain(*vs)

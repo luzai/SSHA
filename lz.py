@@ -1,7 +1,11 @@
-# from __future__ import print_function, absolute_import, division, unicode_literals
+#!/usr/bin/env python3
+# -*- coding: future_fstrings -*-
 
+import matplotlib
+# matplotlib.use('Gtk3Agg')
+# matplotlib.use('TkAgg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
 # plt.switch_backend('Agg')
 # plt.switch_backend('TkAgg')
 
@@ -14,7 +18,7 @@ import os, sys, time, \
     collections, \
     functools, signal
 from os import path as osp
-
+from IPython import embed
 from easydict import EasyDict as edict
 import cv2, cvbase as cvb, copy, pandas as pd, math
 import collections
@@ -25,11 +29,67 @@ import collections
 # shutil, itertools,pathlib,
 # from IPython import embed
 # from tensorboardX import SummaryWriter
+dbg = False
+
+root_path = osp.normpath(
+    osp.join(osp.abspath(osp.dirname(__file__)), )
+) + '/'
+home_path = os.environ['HOME'] + '/'
+work_path = home_path + '/work/'
+share_path = '/data1/share/'
+share_path3 = '/home/share/'
+share_path2 = '/data2/share/'
+
+sys.path.insert(0, root_path)
+
 os.environ.setdefault('log', '1')
 os.environ.setdefault('pytorch', '1')
 os.environ.setdefault('tensorflow', '0')
 os.environ.setdefault('chainer', '0')
 timer = cvb.Timer()
+
+stream_handler = None
+
+
+def set_stream_logger(log_level=logging.INFO):
+    # return None
+    global stream_handler
+    import colorlog
+    sh = colorlog.StreamHandler()
+    sh.setLevel(log_level)
+    sh.setFormatter(
+        colorlog.ColoredFormatter(
+            ' %(asctime)s %(filename)s [line:%(lineno)d] %(log_color)s%(levelname)s%(reset)s %(message)s'))
+    # if stream_handler is not None:
+    #     logging.root.removeHandler(stream_handler)
+    logging.root.addHandler(sh)
+    return sh
+
+
+file_hander = None
+
+
+def set_file_logger(work_dir=None, log_level=logging.INFO):
+    # return None
+    global file_hander
+    work_dir = work_dir or root_path
+    if not osp.exists(work_dir):
+        os.system(f"mkdir -p '{work_dir}'")
+    fh = logging.FileHandler(os.path.join(work_dir, 'log-ing'))
+    fh.setLevel(log_level)
+    fh.setFormatter(
+        logging.Formatter('%(asctime)s %(filename)s [line:%(lineno)d] %(levelname)s %(message)s'))
+    # if file_hander is not None:
+    #     logging.root.removeHandler(file_hander)
+    logging.root.addHandler(fh)
+    return fh
+
+
+if os.environ.get('log', '0') == '1':
+    logging.root.setLevel(logging.INFO)
+    stream_handler = set_stream_logger(logging.INFO)
+    file_hander = set_file_logger(log_level=logging.INFO)
+
 if os.environ.get('chainer', "1") == "1":
     import chainer
     from chainer import cuda
@@ -44,6 +104,10 @@ if os.environ.get('chainer', "1") == "1":
 
 if os.environ.get('pytorch', "1") == "1":
     tic = time.time()
+    os.environ["MKL_NUM_THREADS"] = "32"
+    os.environ["OMP_NUM_THREADS"] = "32"
+    os.environ["NCCL_DEBUG"] = "INFO"
+    # os.environ["NCCL_DEBUG_SUBSYS"] = "ALL"
     import torch
     import torchvision
     import torch.utils.data
@@ -58,9 +122,6 @@ if os.environ.get('pytorch', "1") == "1":
         f'{old_repr(obj.contiguous())} '
         f'type: {obj.type()} shape: {obj.shape}')
     logging.info(f'import pytorch {time.time() - tic}')
-
-# dbg = True
-dbg = False
 
 
 def allow_growth():
@@ -87,16 +148,6 @@ if os.environ.get('tensorflow', '0') == '1':
     oldinit = allow_growth()
     print('import tf', time.time() - tic)
 
-root_path = osp.normpath(
-    osp.join(osp.abspath(osp.dirname(__file__)), )
-) + '/'
-home_path = os.environ['HOME'] + '/'
-work_path = home_path + '/work/'
-share_path = '/data1/share/'
-share_path2 = '/data2/share/'
-
-sys.path.insert(0, root_path)
-
 '''
 %load_ext autoreload
 %autoreload 2
@@ -108,43 +159,13 @@ from IPython.core.interactiveshell import InteractiveShell
 InteractiveShell.ast_node_interactivity = "all"
 '''
 
-
 # torch.set_default_tensor_type(torch.cuda.DoubleTensor)
 # ori_np_err = np.seterr(all='raise') # 1/100000=0 will be error
 
-def get_img_suffix():
-    return ['JPG', 'jpg', 'png', 'JPEG', 'PNG']
-
-
-def set_stream_logger(log_level=logging.DEBUG):
-    import colorlog
-    sh = colorlog.StreamHandler()
-    sh.setLevel(log_level)
-    sh.setFormatter(
-        colorlog.ColoredFormatter(
-            ' %(asctime)s %(filename)s [line:%(lineno)d] %(log_color)s%(levelname)s%(reset)s %(message)s'))
-    logging.root.addHandler(sh)
-
-
-def set_file_logger(work_dir=None, log_level=logging.DEBUG):
-    work_dir = work_dir or root_path
-    fh = logging.FileHandler(os.path.join(work_dir, 'log-ing'))
-    fh.setLevel(log_level)
-    fh.setFormatter(
-        logging.Formatter('%(asctime)s %(filename)s [line:%(lineno)d] %(levelname)s %(message)s'))
-    logging.root.addHandler(fh)
-
-
-if os.environ.get('log', '0') == '1':
-    logging.root.setLevel(logging.INFO)
-    # set_stream_logger(logging.DEBUG)
-    set_stream_logger(logging.INFO)
-    set_file_logger(log_level=logging.DEBUG)
-
 ## ndarray will be pretty
 np.set_string_function(lambda arr: f'np {arr.shape} {arr.dtype} '
-                                   f'{arr.__str__()} '
-                                   f'dtype:{arr.dtype} shape:{arr.shape} np', repr=True)
+f'{arr.__str__()} '
+f'dtype:{arr.dtype} shape:{arr.shape} np', repr=True)
 
 ## print(ndarray) will be pretty (and pycharm dbg)
 # np.set_string_function(lambda arr: f'np {arr.shape} {arr.dtype} \n'
@@ -158,6 +179,8 @@ np.set_string_function(lambda arr: f'np {arr.shape} {arr.dtype} '
 #                                    f'dtype:{arr.dtype} shape:{arr.shape}')
 
 logging.info('import lz')
+def get_img_suffix():
+    return ['JPG', 'jpg', 'png', 'JPEG', 'PNG']
 
 
 def init_mxnet():
@@ -168,7 +191,6 @@ def init_mxnet():
     os.environ['MXNET_CPU_WORKER_NTHREADS'] = "12"
     os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = "0"
     os.environ['MXNET_ENGINE_TYPE'] = "ThreadedEnginePerDevice"
-
 
 def init_dev(n=(0,)):
     import os
@@ -213,7 +235,6 @@ def occupy(dev=range(8)):
 # if something like Runtime Error : an illegal memory access was encountered occur
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
-
 '''
 oldinit = Session.__init__
 
@@ -247,7 +268,6 @@ def allow_growth_keras():
     import keras
     keras.backend.set_session(allow_growth_sess())
 
-
 def get_gpu_memory_map():
     """Get the current gpu usage.
 
@@ -268,8 +288,25 @@ def get_gpu_memory_map():
     return gpu_memory_map
 
 
-def get_mem(ind=0):
-    import gpustat
+def get_mem():
+    import psutil
+    while True:
+        try:
+            mem = psutil.virtual_memory()
+            break
+        except:
+            pass
+    free = mem.free / 1024 ** 3
+    available = mem.available / 1024 ** 3
+    return available
+
+
+import gpustat
+
+ndevs = len(gpustat.GPUStatCollection.new_query().gpus)
+
+
+def get_gpu_mem(ind=0):
     gpus = gpustat.GPUStatCollection.new_query().gpus
     return gpus[ind].entry['memory.used'] / gpus[ind].entry['memory.total'] * 100
 
@@ -280,21 +317,21 @@ def get_utility(ind=0):
     return gpus[ind].entry['utilization.gpu']
 
 
-def show_dev(devs=range(4)):
+def show_dev():
     res = []
-    for ind in devs:
-        mem = get_mem(ind)
+    for ind in range(ndevs):
+        mem = get_gpu_mem(ind)
         print(ind, mem)
         res.append(mem)
     return res
 
 
-def get_dev(n=1, ok=range(4), mem_thresh=(0.1, 0.15), sleep=23.3):  # 0.3: now occupy smaller than 0.3
+def get_dev(n=1, ok=range(ndevs), mem_thresh=(0.1, 0.15), sleep=23.3):  # 0.3: now occupy smaller than 0.3
     if not isinstance(mem_thresh, collections.Sequence):
         mem_thresh = (mem_thresh,)
     
     def get_poss_dev():
-        mems = [get_mem(ind) for ind in ok]
+        mems = [get_gpu_mem(ind) for ind in ok]
         inds, mems = cosort(ok, mems, return_val=True)
         devs = [ind for ind, mem in zip(inds, mems) if mem < mem_thresh[0] * 100]
         
@@ -328,14 +365,14 @@ def cpu_priority(level=19):
     p.nice(level)
 
 
-def mkdir_p(path, delete=True):
+def mkdir_p(path, delete=True, verbose=True):
     path = str(path)
     if path == '':
         return
     if delete and osp.exists(path):
         rm(path)
     if not osp.exists(path):
-        shell(f"mkdir -p '{path}'")
+        os.makedirs(path, exist_ok=True)
 
 
 class Logger(object):
@@ -373,9 +410,14 @@ class Logger(object):
             self.file.close()
 
 
+def set_file_logger_prt(path=root_path):
+    path = str(path) + '/'
+    sys.stdout = Logger(path + 'log-prt')
+    sys.stderr = Logger(path + 'log-prt-err')
+
+
 if os.environ.get('log', '0') == '1':
-    sys.stdout = Logger(root_path + 'log-prt')
-    sys.stderr = Logger(root_path + 'log-prt-err')
+    set_file_logger_prt()
 
 
 class Timer(object):
@@ -578,8 +620,7 @@ def sel_np(A):
     shape = A.shape
     A = A.ravel().tolist()
     sav = {'shape': shape, 'dtype': dtype,
-           'A': A
-           }
+           'A': A}
     return json.dumps(sav)
 
 
@@ -591,7 +632,16 @@ def desel_np(s):
     return A
 
 
+def to_image(arr):
+    from PIL import Image
+    if type(arr).__module__ == 'PIL.Image':
+        return arr
+    if type(arr).__module__ == 'numpy':
+        return Image.fromarray(arr)
+
+
 def to_numpy(tensor):
+    import PIL
     if isinstance(tensor, torch.autograd.Variable):
         tensor = tensor.detach()
     if torch.is_tensor(tensor):
@@ -604,6 +654,8 @@ def to_numpy(tensor):
         else:
             tensor = tensor.cpu().numpy()
             tensor = np.asarray(tensor)
+    if type(tensor).__module__ == 'PIL.Image':
+        tensor = np.asarray(tensor)
     # elif type(tensor).__module__ != 'numpy':
     #     raise ValueError("Cannot convert {} to numpy array"
     #                      .format(type(tensor)))
@@ -638,15 +690,14 @@ def norm_th(tensor):
     return tensor.add_(min).div_(max - min)
 
 
-def load_state_dict(model, state_dict, own_prefix='', own_de_prefix=''):
+def load_state_dict(model, state_dict, prefix='', de_prefix=''):
     own_state = model.state_dict()
     success = []
+    if prefix != '':
+        state_dict = {prefix + name: param for name, param in state_dict.items()}
+    elif de_prefix != '':
+        state_dict = {name.replace(de_prefix, ''): param for name, param in state_dict.items()}
     for name, param in state_dict.items():
-        if own_prefix + name in own_state:
-            name = own_prefix + name
-        if name.replace(own_de_prefix, '') in own_state:
-            name = name.replace(own_de_prefix, '')
-        
         if name not in own_state:
             print('ignore key "{}" in his state_dict'.format(name))
             continue
@@ -738,30 +789,33 @@ def cosort(ind, val, return_val=False):
                                                                         comb_sorted])
 
 
-#
-#
-# @optional_arg_decorator
-# def timeit(fn, info=''):
-#     def wrapped_fn(*arg, **kwargs):
-#         start = time.time()
-#         res = fn(*arg, **kwargs)
-#         diff = time.time() - start
-#         logging.info((info + 'takes time {}').format(diff))
-#         return res
-#
-#     return wrapped_fn
+@optional_arg_decorator
+def timeit(fn, info=''):
+    def wrapped_fn(*arg, **kwargs):
+        start = time.time()
+        res = fn(*arg, **kwargs)
+        diff = time.time() - start
+        logging.info((info + 'takes time {}').format(diff))
+        return res
+    
+    return wrapped_fn
 
 
 class Database(object):
     def __init__(self, file, mode='a'):
         import h5py
-        try:
+        if mode == 'r':
+            try:
+                self.fid = h5py.File(file, mode)
+            except OSError as inst:
+                logging.error(f'{inst}')
+                cp(file, file + f'.{randomword()}')
+                self.fid = h5py.File(file, mode)
+        else:
             self.fid = h5py.File(file, mode)
-        except OSError as inst:
-            logging.error(f'{inst}')
-            rm(file)
-            self.fid = h5py.File(file, 'w')
-            logging.error(f'{file} is delete and write !!')
+        #     rm(file)
+        #     self.fid = h5py.File(file, 'w')
+        #     logging.error(f'{file} is delete and write !!')
     
     def __enter__(self):
         return self
@@ -857,6 +911,75 @@ def df_load(path, name='df'):
     return pd.read_hdf(path, name)
 
 
+import struct
+
+cv_type_to_dtype = {
+    5: np.dtype('float32')
+}
+
+dtype_to_cv_type = {v: k for k, v in cv_type_to_dtype.items()}
+
+
+def read_mat(f):
+    """
+    Reads an OpenCV mat from the given file opened in binary mode
+    """
+    rows, cols, stride, type_ = struct.unpack('iiii', f.read(4 * 4))
+    mat = np.fromstring(f.read(rows * stride), dtype=cv_type_to_dtype[type_])
+    return mat.reshape(rows, cols)
+
+
+def load_mat(filename):
+    """
+    Reads a OpenCV Mat from the given filename
+    """
+    return read_mat(open(filename, 'rb'))
+
+
+cv_type_to_dtype = {
+    5: np.dtype('float32')
+}
+
+dtype_to_cv_type = {v: k for k, v in cv_type_to_dtype.items()}
+
+
+def write_mat(f, m):
+    """Write mat m to file f"""
+    import struct
+    
+    if len(m.shape) == 1:
+        rows = m.shape[0]
+        cols = 1
+    else:
+        rows, cols = m.shape
+    header = struct.pack('iiii', rows, cols, cols * 4, dtype_to_cv_type[m.dtype])
+    f.write(header)
+    f.write(m.data)
+
+
+def save_mat(filename, m):
+    """Saves mat m to the given filename"""
+    return write_mat(open(filename, 'wb'), m)
+
+
+def read_mat(f):
+    """
+    Reads an OpenCV mat from the given file opened in binary mode
+    """
+    import struct
+    
+    rows, cols, stride, type_ = struct.unpack('iiii', f.read(4 * 4))
+    mat = np.fromstring(f.read(rows * stride), dtype=cv_type_to_dtype[type_])
+    return mat.reshape(rows, cols)
+
+
+def load_mat(filename):
+    """
+    Reads a OpenCV Mat from the given filename
+    """
+    return read_mat(open(filename, 'rb'))
+
+
 def yaml_load(file, **kwargs):
     from yaml import Loader
     import yaml
@@ -892,7 +1015,7 @@ def json_dump(obj, file, mode='a'):  # write not append!
     if isinstance(file, str):
         # with codecs.open(file, mode, encoding='utf-8') as fp:
         with open(file, 'w') as fp:
-            json.dump(obj, fp,
+            json.dump(obj, fp, sort_keys=True, indent=4
                       # ensure_ascii=False
                       )
     elif hasattr(file, 'write'):
@@ -997,6 +1120,15 @@ class AsyncDumper(mp.Process):
         self.queue.put((obj, filename))
 
 
+def aria(url, dir_, fn):
+    return shell(f'aria2c -c -s16 -k1M -x16 "{url}" -o "{fn}" -d "{dir_}"', )
+
+
+def hostname():
+    msg = shell('hostname')[0]
+    return msg.strip('\n')
+
+
 def shell(cmd, block=True, return_msg=True, verbose=True, timeout=None):
     import os
     my_env = os.environ.copy()
@@ -1021,7 +1153,7 @@ def shell(cmd, block=True, return_msg=True, verbose=True, timeout=None):
             if msg[0] != '' and verbose:
                 logging.info('stdout {}'.format(msg[0]))
             if msg[1] != '' and verbose:
-                logging.error('stderr {}'.format(msg[1]))
+                logging.error(f'stderr {msg[1]}, cmd {cmd}')
             return msg
         else:
             return task
@@ -1098,12 +1230,18 @@ def show_img(path):
     return fig
 
 
-def plt_imshow(img, inp_mode='rgb', ax=None, ):
+def plt_imshow(img, ax=None, keep_ori_size=False, inp_mode='rgb'):
     img = to_img(img)
     if inp_mode == 'bgr':
         img = img[..., ::-1]
     if ax is None:
-        plt.figure()
+        h, w, c, = img.shape
+        inchh = h / 100
+        inchw = w / 100
+        if keep_ori_size:
+            plt.figure(figsize=(inchw, inchh,))
+        else:
+            plt.figure()
         plt.imshow(img)
         plt.axis('off')
     else:
@@ -1137,6 +1275,36 @@ def plt_imshow_board(img, ax=None, color=None):
         ax.set_ylim(M + margin, -margin)
 
 
+def plt_imshow_tensor(imgs, ncol=10, limit=None):
+    import torchvision
+    if isinstance(imgs, list):
+        imgs = np.asarray(imgs)
+    if imgs.shape[-1] == 3:
+        imgs = np.transpose(imgs, (0, 3, 1, 2))
+    
+    imgs_thumb = torchvision.utils.make_grid(
+        to_torch(imgs), normalize=False, scale_each=True,
+        nrow=ncol, ).numpy()
+    imgs_thumb = to_img(imgs_thumb)
+    maxlen = max(imgs_thumb.shape)
+    if limit is not None and maxlen > limit:
+        imgs_thumb = cvb.resize_keep_ar(imgs_thumb, limit, limit, )
+    #     print(imgs_thumb.shape)
+    plt_imshow(imgs_thumb, keep_ori_size=True)
+
+
+def plt2tensor():
+    import io
+    from torchvision import transforms as trans
+    from PIL import Image
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    roc_curve = Image.open(buf)
+    roc_curve_tensor = trans.ToTensor()(roc_curve)
+    return roc_curve_tensor
+
+
 def to_img(img, ):
     img = np.asarray(img)
     img = img.copy()
@@ -1147,8 +1315,7 @@ def to_img(img, ):
     # if img.dtype == np.float32 or img.dtype == np.float64:
     if img.max() < 1.1:
         img -= img.min()
-        img = img + 1e-12
-        img /= img.max()
+        img = img / (img.max() + 1e-6)
         img *= 255
     img = np.array(img, dtype=np.uint8)
     if len(shape) == 3 and shape[-1] == 1:
@@ -1218,10 +1385,6 @@ def cp(from_path, to):
     if not osp.exists(dst_dir):
         mkdir_p(dst_dir)
     shell('cp -r ' + from_path + ' ' + to)
-
-
-def aria(url, dir_, fn):
-    return shell(f'aria2c -c -s16 -k1M -x16 "{url}" -o "{fn}" -d "{dir_}"', )
 
 
 def mv(from_path, to):
@@ -1457,13 +1620,12 @@ def to_json_format(obj, allow_np=True):
 #     raise TypeError(("batch must contain tensors, numbers, dicts or lists; found {}"
 #                      .format(type(batch[0]))))
 
-def preprocess(img, bbox=None, landmark=None, **kwargs):
+def preprocess(img, landmark, **kwargs):
     from skimage import transform as trans
-    
     if isinstance(img, str):
         img = cvb.read_img(img, **kwargs)
+    assert img is not None
     img = img.copy()
-    M = None
     # image_size = []
     # str_image_size = kwargs.get('image_size', '')
     # if len(str_image_size) > 0:
@@ -1474,58 +1636,27 @@ def preprocess(img, bbox=None, landmark=None, **kwargs):
     #     assert image_size[0] == 112
     #     assert image_size[0] == 112 or image_size[1] == 96
     image_size = [112, 112]
-    if landmark is not None:
-        assert len(image_size) == 2
-        src = np.array([
-            [30.2946, 51.6963],
-            [65.5318, 51.5014],
-            [48.0252, 71.7366],
-            [33.5493, 92.3655],
-            [62.7299, 92.2041]], dtype=np.float32)
-        if image_size[1] == 112:
-            src[:, 0] += 8.0
-        dst = landmark.astype(np.float32)
-        
-        tform = trans.SimilarityTransform()
-        tform.estimate(dst, src)
-        M = tform.params[0:2, :]
-        # M = cv2.estimateRigidTransform( dst.reshape(1,5,2), src.reshape(1,5,2), False)
-    
-    if M is None:
-        if bbox is None:  # use center crop
-            det = np.zeros(4, dtype=np.int32)
-            det[0] = int(img.shape[1] * 0.0625)
-            det[1] = int(img.shape[0] * 0.0625)
-            det[2] = img.shape[1] - det[0]
-            det[3] = img.shape[0] - det[1]
-        else:
-            det = bbox
-        margin = kwargs.get('margin', 44)
-        bb = np.zeros(4, dtype=np.int32)
-        bb[0] = np.maximum(det[0] - margin / 2, 0)
-        bb[1] = np.maximum(det[1] - margin / 2, 0)
-        bb[2] = np.minimum(det[2] + margin / 2, img.shape[1])
-        bb[3] = np.minimum(det[3] + margin / 2, img.shape[0])
-        ret = img[bb[1]:bb[3], bb[0]:bb[2], :]
-        if len(image_size) > 0:
-            ret = cv2.resize(ret, (image_size[1], image_size[0]))
-        return ret
-    else:  # do align using landmark
-        assert len(image_size) == 2
-        
-        # src = src[0:3,:]
-        # dst = dst[0:3,:]
-        
-        # print(src.shape, dst.shape)
-        # print(src)
-        # print(dst)
-        # print(M)
-        warped = cv2.warpAffine(img, M, (image_size[1], image_size[0]), borderValue=0.0)
-        
-        # tform3 = trans.ProjectiveTransform()
-        # tform3.estimate(src, dst)
-        # warped = trans.warp(img, tform3, output_shape=_shape)
-        return warped
+    assert len(image_size) == 2
+    src = np.array([
+        [30.2946, 51.6963],
+        [65.5318, 51.5014],
+        [48.0252, 71.7366],
+        [33.5493, 92.3655],
+        [62.7299, 92.2041]], dtype=np.float32)
+    if image_size[1] == 112:
+        src[:, 0] += 8.0
+    dst = landmark.astype(np.float32)
+    dst = dst.reshape(-1, 2)  # todo, this means dst mast be 5 row
+    if dst.shape[0] == 3:
+        src = src[[0, 1, 2], :]
+    tform = trans.SimilarityTransform()
+    tform.estimate(dst, src)
+    M = tform.params[0:2, :]
+    warped = cv2.warpAffine(img, M, (image_size[1], image_size[0]), borderValue=0.0)
+    # tform3 = trans.ProjectiveTransform()
+    # tform3.estimate(src, dst)
+    # warped = trans.warp(img, tform3, output_shape=_shape)
+    return warped
 
 
 def face_orientation(frame, landmarks):
@@ -1560,25 +1691,19 @@ def face_orientation(frame, landmarks):
     )
     
     dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
-    
     (success, rotation_vector, translation_vector) = cv2.solvePnP(
         model_points, image_points, camera_matrix,
         dist_coeffs,
-        flags=cv2.SOLVEPNP_ITERATIVE,
+        # flags=cv2.SOLVEPNP_ITERATIVE
     )
     
-    # (  rotation_vector, translation_vector, success) = cv2.solvePnPRansac(
-    #         model_points, image_points, camera_matrix,
-    #         dist_coeffs,
-    #         # flags=cv2.SOLVEPNP_P3P,
-    #     )
-    print('retval is  ', success)
     axis = np.float32([[500, 0, 0],
                        [0, 500, 0],
                        [0, 0, 500]])
     
     imgpts, jac = cv2.projectPoints(axis, rotation_vector, translation_vector, camera_matrix, dist_coeffs)
-    modelpts, jac2 = cv2.projectPoints(model_points, rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+    modelpts, jac2 = cv2.projectPoints(model_points, rotation_vector, translation_vector, camera_matrix,
+                                       dist_coeffs)
     rvec_matrix = cv2.Rodrigues(rotation_vector)[0]
     
     proj_matrix = np.hstack((rvec_matrix, translation_vector))
@@ -1681,7 +1806,7 @@ class LogUniformDistribution(object):
 from sklearn.model_selection import ParameterSampler, ParameterGrid
 
 
-def my_softmax(arr):
+def softmax_ch(arr):
     from chainer import cuda
     from chainer import functions as F
     try:
@@ -1722,7 +1847,7 @@ def get_adv(loss, inp, norm='l2', eps=.1, ):
         only_inputs=True
     )[0].detach()
     if 'l2' in norm:
-        xa_advtrue = inp + eps * l2_normalize(features_grad)
+        xa_advtrue = inp + eps * l2_normalize_th(features_grad)
     elif 'linf' in norm:
         xa_advtrue = inp + eps * torch.sign(features_grad)
     elif 'lno' in norm:
@@ -1732,14 +1857,28 @@ def get_adv(loss, inp, norm='l2', eps=.1, ):
     return xa_advtrue
 
 
+def img2tensor():
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    # plt.savefig(buf, format='jpeg')
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    roc_curve = Image.open(buf)
+    roc_curve_tensor = torchvision.transforms.ToTensor()(roc_curve)
+    return roc_curve_tensor
+
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     
     def __init__(self):
+        import collections
         self.val = 0
         self.avg = 0
         self.sum = 0
         self.count = 0
+        self.mem = collections.deque(maxlen=10)  # todo ?
     
     def reset(self):
         self.val = 0
@@ -1748,14 +1887,14 @@ class AverageMeter(object):
         self.count = 0
     
     def update(self, val, n=1):
-        try:
-            val = float(val)
-        except Exception as inst:
-            print(inst)
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
+        val = float(val)
+        self.mem.append(val)
+        self.avg = np.mean(list(self.mem))
+        ## way 2
+        # self.val = val
+        # self.sum += val * n
+        # self.count += n
+        # self.avg = self.sum / self.count
 
 
 def extend_bbox(img_proc, bbox,
@@ -1813,40 +1952,4 @@ def update_rcparams():
 
 
 if __name__ == '__main__':
-    pass
-    
-    ncol = 10
-    nrow = 29 // ncol + 1
-    fs = glob.glob('/home/xinglu/work/yy.ld.30.body/*.png')
-    sizes = []
-    
-    for f in fs:
-        size = (get_img_size(f))
-        sizes.append(size)
-    sizes = np.asarray(sizes)
-    print(sizes.max(axis=0))
-    plt.hist(sizes[:, 0])
-    plt.show()
-    plt.hist(sizes[:, 1])
-    plt.show()
-    
-    exit(0)
-    
-    update_rcparams()
-    fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(ncol, nrow * 543 / 178))
-    axes = np.ravel(axes)
-    
-    for ind, (f, ax) in enumerate(zip(fs, axes)):
-        img = cvb.read_img(f)
-        img = cvb.resize_keep_ar(img, 543, 178)
-        ax.set_title(f'{ind}')
-        _ = plt_imshow(img[..., ::-1], ax=ax)
-    
-    plt_imshow(np.zeros_like(img)
-               , ax=axes[-1])
-    plt.tight_layout(
-        # pad=0,
-        # h_pad=-0.1
-    )
-    # plt.subplots_adjust(wspace=-0.6, hspace=0.1)
-    plt.savefig(work_path + 't.png')
+    print(show_dev())

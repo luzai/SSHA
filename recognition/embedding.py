@@ -7,7 +7,6 @@ import datetime
 from skimage import transform as trans
 import sklearn, lz
 from sklearn import preprocessing
-lz.init_mxnet()
 
 class Embedding:
     def __init__(self, prefix, epoch, ctx_id=0):
