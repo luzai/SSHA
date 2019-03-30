@@ -28,21 +28,21 @@ from deep_pose import PoseDetector
 
 pose_det = PoseDetector()
 
-norm_thresh = 4
+norm_thresh = 41
 min_face = 20
 max_pith = 70
 max_yaw = 70
 det_score_thresh = .9
 pose_norm = 10000
 
-# norm_thresh = 3
+# norm_thresh = 42
 # min_face = 20
 # max_pith = 45
 # max_yaw = 45
 # det_score_thresh = .9
 # pose_norm = 10000
 
-show = False  # False
+show = False
 wait_time = 1000 * 10
 detector = SSHDetector('./kmodel/e2e', 0, ctx_id=gpuid)
 print('detector loader')
@@ -50,8 +50,8 @@ print('detector loader')
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
-src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
+src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
+# src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
 assert osp.exists(src_dir), src_dir
 vs = [glob.iglob(src_dir + f'/**/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
 vseq = itertools.chain(*vs)
@@ -229,8 +229,8 @@ def norm_face(warp_faces, info):
     return res_faces, infonew
 
 
-# mkdir_p(dst + '/face')
-# mkdir_p(dst + '/proc')
+mkdir_p(dst + '/face')
+mkdir_p(dst + '/proc')
 
 detect_meter = AverageMeter()
 align_meter = AverageMeter()
@@ -239,7 +239,6 @@ timer.since_last_check('start ')
 
 all_info = []
 for ind_img, imgfp in enumerate(vseq):
-    # imgfp = '/datanew/caoyangpu/xinglu/youeryuan/20180930 新大一班-林蝶老师-29、30/9.29正、侧、背/正/IMG_9551.JPG'  # 9551
     logging.info(f"--- {imgfp} ---")
     frame = cvb.read_img(imgfp)
     
