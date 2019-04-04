@@ -25,7 +25,7 @@ class FeaExtractor():
             conf.work_path = conf.save_path = conf.model_path = Path('./kmodel/')
             conf.net_depth = 152
             conf.net_mode = 'ir_se'
-            learner = face_learner(conf, True)
+            learner = face_learner(conf, )
             learner.load_state(
                 # fixed_str ='ir_se50.pth',
                 fixed_str='ir_se152.pth',

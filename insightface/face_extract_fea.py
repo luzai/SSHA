@@ -25,9 +25,8 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--score", help="whether show the confidence score", action="store_true", default=True)
     args = parser.parse_args()
 
-    conf = get_config(False)
 
-    learner = face_learner(conf, True)
+    learner = face_learner(conf, )
     learner.threshold = args.threshold
     # conf.work_path = Path('work_space/')
     if conf.device.type == 'cpu':

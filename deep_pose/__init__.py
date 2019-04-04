@@ -1,6 +1,4 @@
 from lz import *
-
-init_dev((1,))
 from deep_pose import datasets, hopenet, utils
 import sys, os, argparse
 
@@ -19,7 +17,6 @@ import torch.nn.functional as F
 from PIL import Image
 
 xrange = range
-
 
 class PoseDetector():
     def __init__(self):

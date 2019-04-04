@@ -710,7 +710,7 @@ def fast_collate(batch):
 
 
 class face_learner(object):
-    def __init__(self, conf, ):
+    def __init__(self, conf, *args, **kwargs):
         self.milestones = conf.milestones
         ## torch reader
         self.dataset = TorchDataset(gl_conf.use_data_folder)
