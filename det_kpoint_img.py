@@ -36,7 +36,7 @@ pose_det = PoseDetector()
 # pose_norm = 10000
 
 # if we need to be strict
-norm_thresh = 55
+norm_thresh = 54
 min_face = 20
 max_pith = 45
 max_yaw = 45
@@ -52,8 +52,8 @@ logging.info('detector loader succ')
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-# src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
-src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
+src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
+# src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
 assert osp.exists(src_dir), src_dir
 vs = [glob.iglob(src_dir + f'/**/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
 vseq = itertools.chain(*vs)
