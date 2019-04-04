@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from insightface.config import conf
 from insightface.mtcnn import MTCNN
-from insightface.Learner import face_learner
+from insightface.Learner import face_learner,FaceInfer
 from insightface.utils import load_facebank, draw_box_name, prepare_facebank
 import lz
 from torchvision import transforms
@@ -25,14 +25,14 @@ class FeaExtractor():
             conf.work_path = conf.save_path = conf.model_path = Path('./kmodel/')
             conf.net_depth = 152
             conf.net_mode = 'ir_se'
-            learner = face_learner(conf, )
+            learner = FaceInfer(conf, )
             learner.load_state(
                 # fixed_str ='ir_se50.pth',
                 fixed_str='ir_se152.pth',
                 resume_path='./kmodel/'
             )
             learner.model.eval()
-            print('learner loaded')
+            logging.info('learner loaded')
             self.learner = learner
         else:
             model_path = root_path + '../insightface/logs/model-r100-arcface-ms1m-refine-v2/model'

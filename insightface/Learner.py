@@ -1,7 +1,7 @@
 # -*- coding: future_fstrings -*-
 import lz
 from lz import *
-from insightface.model import Backbone, MobileFaceNet, CSMobileFaceNet, l2_norm, Arcface, MySoftmax, TripletLoss
+from insightface.model import *
 from insightface import model
 import numpy as np
 from insightface.verifacation import evaluate
@@ -400,7 +400,7 @@ class TorchDataset(object):
 
 class Dataset_val(torch.utils.data.Dataset):
     def __init__(self, path, name, transform=None):
-        from data.data_pipe import get_val_pair
+        from insightface.data.data_pipe import get_val_pair
         self.carray, self.issame = get_val_pair(path, name)
         self.carray = self.carray[:, ::-1, :, :]  # BGR 2 RGB!
         self.transform = transform
@@ -744,22 +744,6 @@ class face_learner(object):
         if conf.net_mode == 'mobilefacenet':
             self.model = MobileFaceNet(conf.embedding_size)
             logging.info('MobileFaceNet model generated')
-        elif conf.net_mode == 'nasnetamobile':
-            self.model = models.nasnetamobile(512)
-        elif conf.net_mode == 'resnext':
-            self.model = models.ResNeXt(**models.resnext._NETS[str(conf.net_depth)])
-        elif conf.net_mode == 'csmobilefacenet':
-            self.model = CSMobileFaceNet(conf.embedding_size)
-            logging.info('CSMobileFaceNet model generated')
-        elif conf.net_mode == 'densenet':
-            self.model = models.DenseNet(**models.densenet._NETS[str(conf.net_depth)])
-        elif conf.net_mode == 'widerresnet':
-            self.model = models.WiderResNet(**models.wider_resnet._NETS[str(conf.net_depth)])
-            # self.model = models.WiderResNetA2(**models.wider_resnet._NETS[str(conf.net_depth)])
-        # elif conf.net_mode == 'seresnext50':
-        #     self.model = se_resnext50_32x4d(512, )
-        # elif conf.net_mode == 'seresnext101':
-        #     self.model = se_resnext101_32x4d(512)
         elif conf.net_mode == 'ir_se' or conf.net_mode == 'ir':
             self.model = Backbone(conf.net_depth, conf.drop_ratio, conf.net_mode)
             logging.info('{}_{} model generated'.format(conf.net_mode, conf.net_depth))
@@ -787,7 +771,6 @@ class face_learner(object):
         elif conf.loss == 'softmax':
             self.head = MySoftmax(embedding_size=conf.embedding_size, classnum=self.class_num)
         elif conf.loss == 'arcfaceneg':
-            from models.model import ArcfaceNeg
             self.head = ArcfaceNeg(embedding_size=conf.embedding_size, classnum=self.class_num)
         else:
             raise ValueError(f'{conf.loss}')

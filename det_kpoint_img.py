@@ -8,7 +8,6 @@ import cvbase as cvb
 import itertools
 from insightface import FeaExtractor
 import face_alignment
-from deep_pose import PoseDetector
 
 # lz.init_dev((2,))
 lz.init_dev(get_dev())
@@ -22,26 +21,18 @@ fa.get_landmarks_from_image(np.random.rand(336, 336, 3))
 extractor = FeaExtractor(
     yy_imgs=None, gpuid=gpuid,
 )
-print('face feature ex loaded ')
+logging.info('face feature ex loaded ')
 scales = [3456, 3456]  # 3456, 4608
-
-pose_det = PoseDetector()
 
 # if imgs are good
 # norm_thresh = 42
 # min_face = 20
-# max_pith = 70
-# max_yaw = 70
 # det_score_thresh = .99
-# pose_norm = 10000
 
 # if we need to be strict
 norm_thresh = 54
 min_face = 20
-max_pith = 45
-max_yaw = 45
 det_score_thresh = .99
-pose_norm = 10000
 
 show = False
 show_face = False
@@ -127,58 +118,14 @@ def detect_face(img, imgfn=None, save=False):
     
     return faces, img
 
-
-def get_normalized_pnt(nose, pnt, ):
-    nose = np.asarray(nose).reshape(2, )
-    pnt = np.asarray(pnt).reshape(2, )
-    dir = pnt - nose
-    norm = np.sqrt((dir ** 2).sum())
-    if norm > pose_norm:
-        print('pose norm is', norm)
-        return True
-    return False
-
-
 def align_face(frame, imgfn, faces, drawon, save=True, ):
     info = []
     frame = frame.copy()
     warp_faces = []
     for num, landmarks in enumerate(faces[:, 5:]):
-        bbox = faces[num, 0:5]
-        imgpts, _, rotate_degree, nose = face_orientation(frame, landmarks)  # roll, pitch, yaw
-        ## rule one: pose dir norm
-        fail_flag = False
-        for imgpt in imgpts:
-            fail_flag = get_normalized_pnt(nose, imgpt)
-        
-        if fail_flag:
-            img_pose, bbox_bias = extend_bbox(frame, bbox)
-            yaw, pitch, roll = pose_det.det(img_pose, nose, drawon)
-            print('3d pose by 2d landmark fail, ',
-                  'roll, pitch, yaw ', rotate_degree,
-                  'roll, pitch, yaw now ', (roll, pitch, yaw))
-            rotate_degree = (roll, pitch, yaw)
-        else:
-            cv2.line(drawon, nose, tuple(imgpts[1, 0, :]), (0, 255, 0), 3)  # GREEN
-            cv2.line(drawon, nose, tuple(imgpts[0, 0, :]), (255, 0, 0,), 3)  # BLUE
-            cv2.line(drawon, nose, tuple(imgpts[2, 0, :]), (0, 0, 255), 3)  # RED
-        
         for index in range(len(landmarks) // 2):
             random_color = random_colors[index]
             cv2.circle(drawon, (landmarks[index * 2], landmarks[index * 2 + 1]), 5, random_color, -1)
-        
-        # face_crop2, _ = extend_bbox(drawon, bbox, .2, .2, .2)
-        # plt_imshow(face_crop2, 'bgr')
-        # plt.show()
-        # plt_imshow(drawon)
-        # plt.show()
-        
-        for j in range(len(rotate_degree)):
-            color = [(0, 255, 0), (255, 0, 0), (0, 0, 255)][j]
-            cv2.putText(drawon,
-                        ('{:05.2f}').format(float(rotate_degree[j])),
-                        (10, 30 + 50 * j + 170 * num), cv2.FONT_HERSHEY_SIMPLEX, 1,
-                        color, thickness=2, lineType=2)
         
         score = faces[num, 4]
         ## rule detection score
@@ -188,22 +135,13 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         height = bbox[3] - bbox[1]
         ## rule face size
         if min(width, height) < min_face: continue
-        rotate_degree = np.asarray(rotate_degree, int)
-        rotate_degree = np.abs(rotate_degree)
-        roll, pitch, yaw = rotate_degree
-        ## rule 3
-        if pitch > max_pith or yaw > max_yaw: continue
-        print('roll pitch yaw ', roll, pitch, yaw)
         
         kps = faces[num, 5:].reshape(5, 2)
         warp_face = preprocess(frame, bbox=bbox, landmark=kps)
-        
-            # plt_imshow(warp_face)
+        # plt_imshow(warp_face)
         # plt.show()
-        
         warp_faces.append(warp_face)
-        
-        info.append({'kpt': kps, 'bbox': bbox, 'rpw': rotate_degree,
+        info.append({'kpt': kps, 'bbox': bbox,
                      'imgfn': imgfn
                      })
     if show:
@@ -250,7 +188,6 @@ for ind_img, imgfp in enumerate(vseq):
     for suffix in get_img_suffix():
         imgfn = imgfn.replace(suffix, '')
     imgfn = imgfn.strip('.')
-    # frame = np.rot90(frame, 3).copy()
     
     faces_infos, drawon = detect_face(frame, imgfn)
     detect_meter.update(timer.since_last_check(verbose=False))
