@@ -327,6 +327,7 @@ def show_dev():
 
 
 def get_dev(n=1, ok=range(ndevs), mem_thresh=(0.1, 0.15), sleep=23.3):  # 0.3: now occupy smaller than 0.3
+    return 1
     if not isinstance(mem_thresh, collections.Sequence):
         mem_thresh = (mem_thresh,)
     

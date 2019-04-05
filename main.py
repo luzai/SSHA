@@ -25,14 +25,12 @@ logging.info('face feature ex loaded ')
 scales = [3456, 3456]  # 3456, 4608
 
 # if imgs are good
-# norm_thresh = 42
-# min_face = 20
-# det_score_thresh = .99
-
+NORM_THRESH_GOOD = 42
 # if we need to be strict
-norm_thresh = 54
-min_face = 20
-det_score_thresh = .99
+NORM_THRESH_STRICT = 54
+MIN_FACE = 20
+DET_SCORE_THRESH = .95
+SIM_THRESH = 0.61
 
 show = False
 show_face = False
@@ -43,18 +41,21 @@ logging.info('detector loader succ')
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-src_dir = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/9.30正、侧、背/'
-# src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
-assert osp.exists(src_dir), src_dir
-vs = [glob.iglob(src_dir + f'/**/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
-vseq = itertools.chain(*vs)
-vseq = list(vseq)
-vseq = [v for v in vseq if 'proc' not in v and 'face' not in v]
-assert vseq, 'chk dir, empty?'
-dst = src_dir
+src_dir_gallery = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/30.正/'
+src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
 
 
-def detect_face(img, imgfn=None, save=False):
+def get_vseq(src_dir):
+    assert osp.exists(src_dir), src_dir
+    vs = [glob.iglob(src_dir + f'/**/*.{suffix}', recursive=True) for suffix in get_img_suffix()]
+    vseq = itertools.chain(*vs)
+    vseq = list(vseq)
+    vseq = [v for v in vseq if 'proc' not in v and 'face' not in v]
+    assert vseq, 'chk dir, empty?'
+    return vseq
+
+
+def detect_face(img, imgfn=None, save=False, dst='/tmp', det_score_thresh=DET_SCORE_THRESH):
     frame = img.copy()
     img = img.copy()
     im_shape = img.shape
@@ -118,7 +119,8 @@ def detect_face(img, imgfn=None, save=False):
     
     return faces, img
 
-def align_face(frame, imgfn, faces, drawon, save=True, ):
+
+def align_face(frame, imgfn, faces, drawon, dst='/tmp', min_face=MIN_FACE, det_score_thresh=DET_SCORE_THRESH):
     info = []
     frame = frame.copy()
     warp_faces = []
@@ -129,7 +131,10 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
         
         score = faces[num, 4]
         ## rule detection score
-        if score < det_score_thresh: continue
+        logging.info(f'det score is {score}')
+        if score < det_score_thresh:
+            logging.info('skip because det score small')
+            continue
         bbox = faces[num, 0:4]
         width = bbox[2] - bbox[0]
         height = bbox[3] - bbox[1]
@@ -150,7 +155,7 @@ def align_face(frame, imgfn, faces, drawon, save=True, ):
     return warp_faces, drawon, info
 
 
-def norm_face(warp_faces, info):
+def norm_face(warp_faces, info, norm_thresh):
     res_faces = []
     infonew = []
     ind = 0
@@ -171,39 +176,107 @@ def norm_face(warp_faces, info):
     return res_faces, infonew
 
 
-mkdir_p(dst + '/face')
-mkdir_p(dst + '/proc')
+def extract_face_and_feature(src_dir, norm_thresh):
+    vseq = get_vseq(src_dir)
+    mkdir_p(src_dir + '/face', delete=False)
+    mkdir_p(src_dir + '/proc', delete=False)
+    all_info = []
+    detect_meter = AverageMeter()
+    align_meter = AverageMeter()
+    norm_meter = AverageMeter()
+    timer.since_last_check('start ')
+    for ind_img, imgfp in enumerate(vseq):
+        logging.info(f"--- {imgfp} ---")
+        frame = cvb.read_img(imgfp)
+        
+        imgfn = osp.basename(imgfp)
+        for suffix in get_img_suffix():
+            imgfn = imgfn.replace(suffix, '')
+        imgfn = imgfn.strip('.')
+        
+        faces_infos, drawon = detect_face(frame, imgfn, dst=src_dir)
+        detect_meter.update(timer.since_last_check(verbose=False))
+        
+        faces_imgs, drawon, info = align_face(frame, imgfn, faces_infos, drawon, dst=src_dir)
+        align_meter.update(timer.since_last_check(verbose=False))
+        
+        faces_imgs, info = norm_face(faces_imgs, info, norm_thresh)
+        norm_meter.update(timer.since_last_check(verbose=False))
+        all_info.extend(info)
+        for ind, face in enumerate(faces_imgs):
+            lz.mkdir_p(f'{src_dir}/face/', delete=False)
+            cvb.write_img(face, f'{src_dir}/face/{imgfn}.{ind}.png')
+    lz.mkdir_p(f'{src_dir}/face/', delete=False)
+    lz.msgpack_dump(all_info, f'{src_dir}/face/info.pk')
+    
+    print('final how many imgs', ind_img,
+          'detect ', detect_meter.avg,
+          'align ', align_meter.avg,
+          'norm ', norm_meter.avg)
 
-detect_meter = AverageMeter()
-align_meter = AverageMeter()
-norm_meter = AverageMeter()
-timer.since_last_check('start ')
 
-all_info = []
-for ind_img, imgfp in enumerate(vseq):
-    logging.info(f"--- {imgfp} ---")
-    frame = cvb.read_img(imgfp)
+def info2face_imgfn(info_, src_dir):
+    imgfn = info_['imgfn']
+    ind = info_['ind']
+    imgfn = glob.glob(f'{src_dir}/face/{imgfn}.{ind}*')
+    imgfn = list(imgfn)
+    assert len(imgfn) >= 1
+    imgfn = imgfn[0]
+    return imgfn
+
+
+def info2face(info_, src_dir):
+    imgfn = info2face_imgfn(info_, src_dir)
+    img = cvb.read_img(imgfn)
+    img = cvb.rgb2bgr(img)
+    assert img is not None
+    return img
+
+
+def match_face(src_dir_gallery, src_dir):
+    info_gallery = msgpack_load(src_dir_gallery + '/face/info.pk')
+    info = msgpack_load(src_dir + '/face/info.pk')
+    faces = []
+    feas = []
     
-    imgfn = osp.basename(imgfp)
-    for suffix in get_img_suffix():
-        imgfn = imgfn.replace(suffix, '')
-    imgfn = imgfn.strip('.')
+    for info_ in info_gallery:
+        img = info2face(info_, src_dir_gallery)
+        feas.append(info_['fea'])
+        faces.append(img)
+    faces = np.array(faces)
+    feas = np.asarray(feas)
+    # plt_imshow_tensor(faces)
     
-    faces_infos, drawon = detect_face(frame, imgfn)
-    detect_meter.update(timer.since_last_check(verbose=False))
+    from scipy.spatial.distance import cdist
+    for info_ in info:
+        fea = info_['fea'].reshape(1, -1)
+        dists = cdist(fea, feas)
+        ind_gallery = dists.argmin()
+        face_gallery = faces[ind_gallery]
+        face_probe = info2face(info_, src_dir)
+        #     plt_imshow_tensor([face_gallery, face_probe])
+        info_['ind_gallery'] = ind_gallery
+        info_['face_gallery'] = face_gallery
+        info_['sim'] = (2 - dists[0, ind_gallery]) / 2
+        #     break
     
-    faces_imgs, drawon, info = align_face(frame, imgfn, faces_infos, drawon)
-    align_meter.update(timer.since_last_check(verbose=False))
-    
-    faces_imgs, info = norm_face(faces_imgs, info)
-    norm_meter.update(timer.since_last_check(verbose=False))
-    all_info.extend(info)
-    for ind, face in enumerate(faces_imgs):
-        lz.mkdir_p(f'{dst}/face/', delete=False)
-        cvb.write_img(face, f'{dst}/face/{imgfn}.{ind}.png')
-lz.mkdir_p(f'{dst}/face/', delete=False)
-lz.msgpack_dump(all_info, f'{dst}/face/info.pk')
-print('final how many imgs', ind_img,
-      'detect ', detect_meter.avg,
-      'align ', align_meter.avg,
-      'norm ', norm_meter.avg)
+    msgpack_dump(info, src_dir + '/face/info.pk')
+
+
+def clean_small_similarity(src_dir):
+    info = msgpack_load(src_dir + '/face/info.pk')
+    info_res = []
+    for info_ in info:
+        if info_['sim'] > SIM_THRESH and info_['norm'] > NORM_THRESH_STRICT:
+            info_res.append(info_)
+        else:
+            imgfn = info2face_imgfn(info_, src_dir)
+            _ = rm(imgfn)
+    msgpack_dump(info_res, src_dir + '/face/info.pk')
+
+
+extract_face_and_feature(src_dir_gallery, NORM_THRESH_GOOD)
+extract_face_and_feature(src_dir, NORM_THRESH_STRICT)
+
+match_face(src_dir_gallery, src_dir)
+clean_small_similarity(src_dir)
