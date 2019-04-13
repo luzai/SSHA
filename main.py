@@ -41,7 +41,7 @@ logging.info('detector loader succ')
 if show:
     cv2.namedWindow('test', cv2.WINDOW_NORMAL)
 
-src_dir_gallery = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/30.正/'
+src_dir_gallery = '/home/xinglu/work/youeryuan/20180930 新大一班-林蝶老师-29、30/30.正.named/'
 src_dir = '/data1/share/youeryuan/20180930 新大一班-林蝶老师-29、30/20180930 大一班9.30/9.30/'
 
 
@@ -171,6 +171,8 @@ def norm_face(warp_faces, info, norm_thresh):
         info_['norm'] = norm
         info_['fea'] = fea
         info_['ind'] = ind
+        info_['warp_face'] = warp_face
+        
         ind += 1
         infonew.append(info_)
     return res_faces, infonew
@@ -206,6 +208,8 @@ def extract_face_and_feature(src_dir, norm_thresh):
         for ind, face in enumerate(faces_imgs):
             lz.mkdir_p(f'{src_dir}/face/', delete=False)
             cvb.write_img(face, f'{src_dir}/face/{imgfn}.{ind}.png')
+            all_info[ind]['imgfn_from'] = osp.basename(imgfp)
+            all_info[ind]['imgfn_face_to'] = f'{imgfn}.{ind}.png'
     lz.mkdir_p(f'{src_dir}/face/', delete=False)
     lz.msgpack_dump(all_info, f'{src_dir}/face/info.pk')
     
@@ -256,7 +260,7 @@ def match_face(src_dir_gallery, src_dir):
         face_probe = info2face(info_, src_dir)
         #     plt_imshow_tensor([face_gallery, face_probe])
         info_['ind_gallery'] = ind_gallery
-        info_['face_gallery'] = face_gallery
+        info_['gallery_img'] = face_gallery
         info_['sim'] = (2 - dists[0, ind_gallery]) / 2
         #     break
     
